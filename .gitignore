@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+
+# Secretos y datos: nunca al repositorio
+.env
+.env.*
+!.env.example
+credenciales.txt
+server/scripts/setup-db.sql
+backups/
+*.dump
+
+# Ajustes locales del editor
+.claude/settings.local.json
+*.tsbuildinfo
