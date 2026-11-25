@@ -1,181 +1,239 @@
+<div align="center">
+
 # SysPass
 
-Bóveda de credenciales multiempresa (SaaS). Cada empresa se registra, entra con su **código de empresa** y ve la plataforma con su propio nombre, logo y color.
+**Bóveda de credenciales multiempresa para equipos de TI y soporte**
 
-- **backend/** → `server/`: Node.js 20+ · Fastify · PostgreSQL (`pg`, SQL directo)
-- **frontend/** → `web/`: React · TypeScript · Vite
+Guarda los accesos de cada cliente —servidores, NAS, VPN, correos, plataformas— cifrados, con permisos por cliente y registro de quién vio cada contraseña.
 
-## Instalación en un servidor (1 comando)
+[![Versión](https://img.shields.io/github/v/release/Jamesllm/syspass?label=versi%C3%B3n&color=0f766e)](https://github.com/Jamesllm/syspass/releases/latest)
+[![Imagen Docker](https://img.shields.io/badge/imagen-ghcr.io%2Fjamesllm%2Fsyspass-0f766e?logo=docker&logoColor=white)](https://github.com/Jamesllm/syspass/pkgs/container/syspass)
+[![Build](https://img.shields.io/github/actions/workflow/status/Jamesllm/syspass/release.yml?label=build)](https://github.com/Jamesllm/syspass/actions/workflows/release.yml)
+![Plataformas](https://img.shields.io/badge/plataformas-amd64%20%7C%20arm64-555)
 
-Requisitos: Linux (Ubuntu, Debian, Rocky…) con 1 GB de RAM. Si no hay Docker, el instalador ofrece instalarlo.
+[Instalación](#instalación) · [Características](#características) · [Seguridad](#seguridad) · [Administración](#administración) · [Desarrollo](#desarrollo)
 
-**Con la imagen publicada** (después de crear una versión, ver más abajo):
+</div>
+
+---
+
+## Características
+
+| | |
+|---|---|
+| **Multiempresa** | Cada empresa se registra en `/registro` y entra con su propio código. Sus datos, usuarios y llave de cifrado están aislados del resto. |
+| **Marca propia** | Cada empresa usa su nombre, su logo y su color. El color se ajusta solo para mantener buen contraste en modo claro y oscuro. |
+| **Clientes y recursos** | Organiza los accesos por cliente y tipo (servidor, NAS, VPN, hipervisor, correo, plataforma web…), con varias cuentas por recurso. |
+| **Permisos** | Roles *administrador*, *editor* y *solo lectura*, con asignación de clientes por usuario. |
+| **Auditoría** | Queda registrado cada inicio de sesión, cada contraseña vista o copiada y cada cambio, con usuario, fecha e IP. |
+| **Revisión de seguridad** | Detecta contraseñas débiles, repetidas o sin cambiar en más de 180 días. |
+| **Importación** | Convierte un archivo de texto con credenciales en clientes, recursos y cuentas cifradas, con vista previa. |
+| **Móvil** | Diseño adaptado al teléfono, con navegación inferior y botones táctiles. Sin scroll horizontal. |
+| **Panel de plataforma** | El dueño de la instalación ve todas las empresas registradas y puede suspenderlas o reactivarlas. |
+
+---
+
+## Instalación
+
+### Requisitos
+
+- Servidor **Linux** (Ubuntu 22.04+, Debian 12+, Rocky/Alma 9+) con **1 GB de RAM** y 5 GB de disco
+- Acceso `sudo`
+- Docker 24+ con Compose v2. Si no está instalado, el instalador ofrece instalarlo.
+- *(Opcional)* Un dominio apuntando al servidor, para tener HTTPS
+
+### Un comando
 
 ```bash
 curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.sh \
   | sudo SYSPASS_IMAGE=ghcr.io/jamesllm/syspass:latest bash
 ```
 
-**Desde el código** (construye la imagen en el servidor):
+El instalador:
+
+1. Comprueba Docker y lo instala si falta.
+2. Pregunta el **dominio** y el usuario dueño de la plataforma.
+3. Genera la llave maestra de cifrado y la contraseña de la base de datos.
+4. Levanta SysPass, PostgreSQL y, si hay dominio, Caddy con certificado HTTPS automático.
+5. Muestra la dirección de acceso y una contraseña temporal para el dueño.
+
+Todo queda en `/opt/syspass`.
+
+### Con dominio o sin dominio
+
+| | Con dominio | Sin dominio |
+|---|---|---|
+| Dirección | `https://vault.miempresa.com` | `http://IP-DEL-SERVIDOR` |
+| Certificado | Let's Encrypt automático, con renovación | — |
+| Puertos | 80 y 443 (Caddy) | 80, o el que elijas |
+| Uso recomendado | Acceso desde internet | Red interna o VPN |
+
+> [!WARNING]
+> Sin dominio el tráfico viaja sin cifrar (HTTP). Úsalo solo dentro de la red de la empresa o a través de una VPN.
+
+> [!TIP]
+> Para que el dominio funcione, crea antes un registro DNS **A** apuntando a la IP pública del servidor y abre los puertos 80 y 443 en el firewall.
+
+### Instalación sin preguntas
+
+Todas las respuestas se pueden pasar como variables:
+
+```bash
+curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.sh \
+  | sudo SYSPASS_IMAGE=ghcr.io/jamesllm/syspass:latest \
+         DOMAIN=vault.miempresa.com ACME_EMAIL=ti@miempresa.com \
+         OWNER_USER=admin OWNER_NAME="Equipo TI" bash
+```
+
+| Variable | Descripción | Por defecto |
+|---|---|---|
+| `SYSPASS_IMAGE` | Imagen a instalar | — |
+| `DOMAIN` | Dominio público; vacío = acceso por IP | vacío |
+| `ACME_EMAIL` | Correo para avisos del certificado | vacío |
+| `APP_PORT` | Puerto web cuando no hay dominio | `80` |
+| `OWNER_USER` / `OWNER_NAME` | Cuenta del dueño de la plataforma | `admin` |
+| `SYSPASS_DIR` | Carpeta de instalación | `/opt/syspass` |
+
+### Desde el código fuente
 
 ```bash
 git clone https://github.com/Jamesllm/syspass.git && cd syspass
 sudo ./deploy/install.sh
 ```
 
-El instalador pregunta el **dominio** (con dominio activa HTTPS automático con Let's Encrypt mediante Caddy; vacío usa la IP y el puerto 80) y el usuario dueño. Genera `VAULT_KEY` y la clave de PostgreSQL, levanta todo en `/opt/syspass` y muestra la dirección y la contraseña temporal del dueño. Para instalar sin preguntas: `DOMAIN=… ACME_EMAIL=… OWNER_USER=admin`.
+La imagen se construye en el propio servidor y `syspass upgrade` la reconstruye a partir de `git pull`.
 
-### Administración
+### Primer ingreso
+
+1. Abre la dirección que mostró el instalador.
+2. Entra con la empresa **`syspass`**, tu usuario y la contraseña temporal. Te pedirá cambiarla.
+3. Comparte `https://tu-dirección/registro` con las empresas que usarán la plataforma. Cada una crea su espacio y su primer administrador.
+
+---
+
+## Administración
+
+El instalador deja el comando `syspass` disponible en el servidor:
+
+| Comando | Qué hace |
+|---|---|
+| `syspass status` | Estado de los servicios y dirección pública |
+| `syspass logs [app\|db\|caddy]` | Registros en vivo |
+| `syspass start` · `stop` · `restart` | Controla los servicios |
+| `syspass backup` | Respaldo de la base en `/opt/syspass/backups` |
+| `syspass restore <archivo>` | Restaura un respaldo (antes hace uno del estado actual) |
+| `syspass upgrade` | Respaldo, nueva versión y migraciones automáticas |
+| `syspass admin <empresa> <usuario> "Nombre"` | Crea o restablece el administrador de una empresa |
+| `syspass owner <usuario> "Nombre"` | Crea o restablece un dueño de la plataforma |
+| `syspass uninstall [--purge]` | Detiene SysPass. Con `--purge` borra también los datos. |
+
+### Respaldos
 
 ```bash
-syspass status            # estado y dirección
-syspass logs              # registros de la app (o: syspass logs db)
-syspass backup            # respaldo de la base en /opt/syspass/backups
-syspass restore archivo   # restaurar un respaldo
-syspass upgrade           # respaldo + nueva versión + migraciones automáticas
-syspass admin drago admin "Nombre"   # crear o restablecer el admin de una empresa
-syspass owner admin "Nombre"         # crear o restablecer un dueño de la plataforma
-syspass uninstall [--purge]
+syspass backup
 ```
 
-### Publicar una versión
-
-El workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) construye la imagen para `amd64` y `arm64`, la publica en `ghcr.io/jamesllm/syspass` y adjunta `install.sh` a la versión:
+Para programarlo cada noche:
 
 ```bash
-git tag v1.0.0 && git push --tags
+echo '0 2 * * * root /usr/local/bin/syspass backup' | sudo tee /etc/cron.d/syspass-backup
 ```
 
-Después, en GitHub → Packages → syspass, marca el paquete como **público** para que los servidores puedan descargarlo sin credenciales.
+> [!IMPORTANT]
+> Las contraseñas solo se pueden descifrar con la **`VAULT_KEY`** de `/opt/syspass/.env`. Guarda una copia fuera del servidor, por ejemplo en otro gestor o impresa en un sobre cerrado. Un respaldo sin esa llave no se puede recuperar, y la llave junto al respaldo da acceso a todo: guárdalos por separado.
 
-### Windows Server o Docker Desktop
+### Actualizar
 
-El instalador es solo para Linux. En Windows usa Docker Desktop (o WSL2) con el mismo `docker-compose.yml` que genera el instalador, o la instalación manual con Node que está más abajo.
+```bash
+syspass upgrade
+```
 
-## Multiempresa
+Hace un respaldo, descarga la imagen nueva, reinicia y aplica las migraciones pendientes.
 
-| Pieza | Detalle |
+---
+
+## Seguridad
+
+| Capa | Implementación |
 |---|---|
-| Registro | `/registro` es público: crea la empresa (nombre + código) y su primer administrador |
-| Login | Empresa (código) + usuario + contraseña. El navegador recuerda la última empresa y muestra su marca |
-| Marca | Menú **Empresa** (admin): nombre, logo (PNG/JPG/WEBP/SVG ≤ 200 KB) y color, ajustado solo a contraste 4.5:1 en claro y oscuro |
-| Plataforma | La empresa con código `syspass` es la dueña: sus administradores ven el menú **Empresas** para revisar, suspender y reactivar |
-| Aislamiento | Toda consulta filtra por empresa; usuarios y clientes son únicos por empresa |
+| Cifrado de contraseñas | AES-256-GCM. Cada empresa tiene su **propia llave de datos**, envuelta con una llave derivada (HKDF) de `VAULT_KEY`. El id de la cuenta se usa como dato autenticado: un texto cifrado no sirve si se copia a otra fila. |
+| Base de datos | Solo guarda texto cifrado. Un volcado sin `VAULT_KEY` no expone contraseñas. |
+| Contraseñas de usuarios | scrypt (N = 32768) y contraseña temporal obligatoria de cambiar en el primer ingreso |
+| Sesiones | Cookie `httpOnly` + `SameSite=Strict` (`Secure` con HTTPS). Cierre por inactividad a los 30 min y duración máxima de 12 h. |
+| Aislamiento | Cada consulta se filtra por empresa. Usuarios y clientes son únicos dentro de su empresa. |
+| Aplicación web | CSP estricta, cabecera anti‑CSRF propia, límite de 8 intentos de inicio de sesión cada 5 min por IP |
+| Contenedor | Imagen mínima (Alpine) que corre con un usuario sin privilegios y tiene healthcheck |
 
-## Cómo protege las contraseñas
+> [!NOTE]
+> El servidor necesita `VAULT_KEY` para descifrar. Quien tenga acceso de administrador al servidor **y** a `/opt/syspass/.env` puede leer la bóveda: limita ese acceso.
 
-| Capa | Detalle |
+Para reportar una vulnerabilidad, abre un aviso privado en [Security advisories](https://github.com/Jamesllm/syspass/security/advisories/new). No uses un *issue* público.
+
+---
+
+## Arquitectura
+
+```
+            ┌──────────── servidor ────────────────────────────┐
+ navegador ─┼─▶ Caddy :443 ──▶ SysPass :8080 ──▶ PostgreSQL 17 │
+            │   (solo con dominio)  API + frontend   (volumen)  │
+            └──────────────────────────────────────────────────┘
+```
+
+| Carpeta | Contenido |
 |---|---|
-| Cifrado | AES-256-GCM por contraseña con la **llave propia de cada empresa** (envuelta con una llave derivada de `VAULT_KEY`). El id de la cuenta va como AAD |
-| Base de datos | Solo guarda texto cifrado (`v2.iv.tag.ct`). Un volcado de la base sin `VAULT_KEY` no sirve |
-| Usuarios | Contraseñas con scrypt; contraseña temporal obligatoria de cambiar al primer ingreso |
-| Sesiones | Cookie `httpOnly` + `SameSite=Strict`, cierre por inactividad (30 min) y máximo 12 h |
-| Permisos | `admin` todo · `editor` ve y edita sus clientes · `lector` ve y copia sus clientes |
-| Auditoría | Cada inicio de sesión, contraseña vista/copiada y cambio queda registrado con usuario e IP |
-| Red | CSP estricta, cabecera anti‑CSRF propia, límite de 8 intentos de login cada 5 min por IP |
+| `server/` | API en Node.js 22, Fastify y PostgreSQL (`pg`, SQL directo con migraciones en `server/migrations`) |
+| `web/` | Frontend en React 19, TypeScript y Vite, con componentes reutilizables en `web/src/components` |
+| `deploy/` | Instalador y CLI `syspass` |
+| `Dockerfile` | Imagen única que sirve la API y el frontend compilado, y migra al arrancar |
 
-> Los datos anteriores a la versión multiempresa (`v1`) se recifran solos con `npm run migrate`.
+---
 
-> El servidor puede descifrar (necesita `VAULT_KEY`). Quien tenga acceso root al servidor **y** al `.env` puede leer la bóveda: protege ese servidor y ese archivo.
+## Desarrollo
 
-## Desarrollo local
+Requisitos: Node.js 22+ y PostgreSQL 15+.
 
-```powershell
+```bash
 npm install
-copy .env.example .env      # completa DATABASE_URL y VAULT_KEY (npm run keygen)
+cp .env.example .env            # completa DATABASE_URL y VAULT_KEY
+npm run keygen                  # genera un valor para VAULT_KEY
 npm run migrate
-npm run platform:init -- admin "Nombre Apellido"   # empresa dueña "syspass"
-npm run admin:create -- <codigo-empresa> <usuario> "Nombre"   # (re)crear admin de una empresa
+npm run platform:init -- admin "Tu nombre"
 ```
 
 En dos terminales:
 
-```powershell
-npm run dev:server   # API en http://localhost:8080
+```bash
+npm run dev:server              # API en http://localhost:8080
+npm run dev:web                 # Frontend en http://localhost:5173
 ```
 
-```powershell
-npm run dev:web      # Frontend en http://localhost:5173 (redirige /api al backend)
-```
+### Variables de entorno
 
-## Despliegue en el servidor de la empresa
+| Variable | Descripción | Por defecto |
+|---|---|---|
+| `DATABASE_URL` | Conexión a PostgreSQL | — |
+| `VAULT_KEY` | Llave maestra, 32 bytes en base64 (`npm run keygen`) | — |
+| `PORT` / `HOST` | Dirección de escucha | `8080` / `0.0.0.0` |
+| `SECURE_COOKIES` | `true` cuando se sirve por HTTPS | `false` |
+| `TRUST_PROXY` | `true` detrás de un proxy inverso | `false` |
+| `SESSION_IDLE_MINUTES` | Cierre por inactividad | `30` |
+| `SESSION_MAX_HOURS` | Duración máxima de una sesión | `12` |
+| `CORS_ORIGINS` | Orígenes permitidos si el frontend está en otro dominio | vacío |
+| `SERVE_WEB` | `false` para no servir el frontend desde la API | `true` |
 
-### 1. Base de datos (una sola vez)
+### Importar credenciales desde texto
 
-```sql
-create role dragovault login password 'UNA_CLAVE_LARGA';
-create database dragovault owner dragovault encoding 'UTF8';
-```
+En **Importar** (administrador de la empresa). El importador reconoce secciones en mayúsculas como `WINDOWS SERVER - CLIENTE`, elementos numerados (`1. NAS`) y líneas `usuario:`, `correo:`, `pass:`, `ip:`, `id:` y `enlace:`. Antes de guardar muestra una vista previa sin contraseñas.
 
-### 2. Aplicación
+### Publicar una versión
 
 ```bash
-git clone <repo> /opt/drago-vault && cd /opt/drago-vault
-npm ci
-cp .env.example .env        # DATABASE_URL, VAULT_KEY nueva, HOST=127.0.0.1, SECURE_COOKIES=true, TRUST_PROXY=true
-npm run build               # compila web/dist y server/dist
-npm run migrate
-npm run platform:init -- admin "Nombre Apellido"   # empresa dueña "syspass"
-npm run admin:create -- <codigo-empresa> <usuario> "Nombre"   # (re)crear admin de una empresa
-npm start                   # sirve API + frontend en el puerto 8080
+git tag v1.1.0 && git push --tags
 ```
 
-**Frontend y backend separados:** por defecto el backend también sirve `web/dist` (un solo puerto). Para servirlos por separado, pon `SERVE_WEB=false`, publica `web/dist` con nginx/IIS y apunta `/api` al backend (mismo dominio). Si el frontend va en otro dominio, compila con `VITE_API_URL=https://api.dominio npm run build -w web` y define `CORS_ORIGINS` en el backend.
+El workflow [`release.yml`](.github/workflows/release.yml) construye la imagen para `amd64` y `arm64`, la publica en `ghcr.io/jamesllm/syspass` con las etiquetas `1.1.0`, `1.1` y `latest`, y adjunta `install.sh` a la versión.
 
-### 3. Servicio (Linux, systemd)
+### Windows
 
-`/etc/systemd/system/drago-vault.service`
-
-```ini
-[Unit]
-Description=DRAGO Vault
-After=network.target postgresql.service
-
-[Service]
-WorkingDirectory=/opt/drago-vault
-ExecStart=/usr/bin/npm start
-Restart=always
-User=dragovault
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl enable --now drago-vault
-```
-
-En Windows Server se puede usar [NSSM](https://nssm.cc) apuntando a `npm.cmd start` con el directorio del proyecto.
-
-### 4. HTTPS con nginx (recomendado)
-
-```nginx
-server {
-  listen 443 ssl;
-  server_name vault.drago.pe;
-  ssl_certificate     /etc/ssl/drago/fullchain.pem;
-  ssl_certificate_key /etc/ssl/drago/privkey.pem;
-
-  location / {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-  }
-}
-```
-
-Lo ideal es que solo sea accesible desde la red interna o la VPN.
-
-### 5. Respaldos
-
-```bash
-pg_dump -Fc dragovault > /respaldos/dragovault-$(date +%F).dump
-```
-
-Guarda **`VAULT_KEY` aparte** del respaldo (por ejemplo, impresa en sobre cerrado o en otro gestor). Sin esa llave el respaldo no se puede descifrar; con ella y el respaldo juntos, sí.
-
-## Importar un archivo de texto
-
-Menú **Importar** (admin de la empresa; importa en su propia empresa). Entiende secciones `TIPO - CLIENTE` en mayúsculas, elementos numerados (`1. NAS`) y líneas `usuario:`, `user:`, `correo:`, `pass:`, `ip:`, `id:`, `enlace:`. Muestra una vista previa sin contraseñas antes de guardar. Después de importar, borra el `.txt` original.
+El instalador es solo para Linux. En Windows Server puedes usar Docker Desktop o WSL2 con el `docker-compose.yml` que genera el instalador, o la instalación con Node descrita en [Desarrollo](#desarrollo), ejecutando `npm run build` y `npm start` como servicio (por ejemplo con NSSM).
