@@ -11,6 +11,6 @@ server/scripts/setup-db.sql
 backups/
 *.dump
 
-# Ajustes locales del editor
-.claude/settings.local.json
+# Ajustes locales del editor y del asistente
+.claude/
 *.tsbuildinfo
