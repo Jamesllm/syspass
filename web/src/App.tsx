@@ -5,7 +5,7 @@ import { AppShell, type View } from './layout/AppShell';
 import { api, errorText, setUnauthorizedHandler } from './lib/api';
 import { applyAccent, applyTitle } from './lib/brand';
 import { navigate, usePath } from './lib/router';
-import { accountIssues, type Client, type Org, type Resource, type User, type Vault } from './lib/types';
+import { accountIssues, type AppConfig, type AppMode, type Client, type Org, type Resource, type User, type Vault } from './lib/types';
 import { AuditView } from './views/AuditView';
 import { ChangePasswordModal, ForcedPasswordChange, Login, Register } from './views/Auth';
 import { ClientModal } from './views/ClientModal';
@@ -17,12 +17,18 @@ import { ReviewView } from './views/ReviewView';
 import { UsersView } from './views/UsersView';
 import { VaultView } from './views/VaultView';
 
-type Session = { user: User; org: Org; idleMinutes: number };
+type Session = { user: User; org: Org; mode: AppMode; idleMinutes: number };
 type AuthState = { status: 'loading' } | { status: 'out' } | ({ status: 'in' } & Session);
 
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' });
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const path = usePath();
+
+  // Modo de la instalación (una empresa o multiempresa) y marca para el login
+  useEffect(() => {
+    api<AppConfig>('/api/public/config').then(setConfig).catch(() => setConfig({ mode: 'multi', org: null }));
+  }, []);
 
   const refreshMe = useCallback(async () => {
     try {
@@ -53,15 +59,19 @@ export default function App() {
   // Con sesión iniciada, /registro no aplica
   useEffect(() => { if (auth.status === 'in' && path !== '/') navigate('/'); }, [auth.status, path]);
 
-  if (auth.status === 'loading') return <div className="loading">Cargando…</div>;
+  if (auth.status === 'loading' || (auth.status === 'out' && !config)) return <div className="loading">Cargando…</div>;
   if (auth.status === 'out') {
-    return path === '/registro' ? <Register onRegistered={refreshMe} /> : <Login onLogin={refreshMe} />;
+    // En modo una sola empresa no hay registro público
+    return path === '/registro' && config!.mode === 'multi'
+      ? <Register onRegistered={refreshMe} />
+      : <Login config={config!} onLogin={refreshMe} />;
   }
   if (auth.user.mustChange) return <ForcedPasswordChange user={auth.user} onDone={refreshMe} onLogout={logout} />;
   return (
     <Workspace
       user={auth.user}
       org={auth.org}
+      mode={auth.mode}
       idleMinutes={auth.idleMinutes}
       onLogout={logout}
       onOrgChange={(o) => setAuth({ ...auth, org: o })}
@@ -69,8 +79,8 @@ export default function App() {
   );
 }
 
-function Workspace({ user, org, idleMinutes, onLogout, onOrgChange }: {
-  user: User; org: Org; idleMinutes: number; onLogout: () => void; onOrgChange: (o: Org) => void;
+function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
+  user: User; org: Org; mode: AppMode; idleMinutes: number; onLogout: () => void; onOrgChange: (o: Org) => void;
 }) {
   const toast = useToast();
   const [vault, setVault] = useState<Vault | null>(null);
@@ -104,6 +114,7 @@ function Workspace({ user, org, idleMinutes, onLogout, onOrgChange }: {
     <AppShell
       user={user}
       org={org}
+      mode={mode}
       clients={vault?.clients ?? []}
       counts={counts}
       totalResources={vault?.resources.length ?? 0}
@@ -133,8 +144,8 @@ function Workspace({ user, org, idleMinutes, onLogout, onOrgChange }: {
           {view.kind === 'users' && isAdmin && <UsersView clients={vault.clients} meId={user.id} />}
           {view.kind === 'audit' && isAdmin && <AuditView />}
           {view.kind === 'import' && isAdmin && <ImportView onImported={load} />}
-          {view.kind === 'settings' && isAdmin && <OrgSettingsView org={org} onSaved={onOrgChange} />}
-          {view.kind === 'platform' && isAdmin && org.isPlatform && <OrgsView />}
+          {view.kind === 'settings' && isAdmin && <OrgSettingsView org={org} mode={mode} onSaved={onOrgChange} />}
+          {view.kind === 'platform' && isAdmin && org.isPlatform && mode === 'multi' && <OrgsView />}
         </>
       )}
 

@@ -35,3 +35,21 @@ export async function orgBrand(id: string, db?: Db): Promise<OrgBrand> {
     'select id, slug, name, logo, accent, is_platform as "isPlatform" from orgs where id = $1', [id], db);
   return o;
 }
+
+/**
+ * Empresa que usa el modo "una sola empresa".
+ * Con SYSPASS_ORG definido usa esa; si no, la única empresa que no sea la de plataforma,
+ * o la de plataforma si es la única que existe. null si no se puede decidir.
+ */
+export async function singleOrg(slug: string): Promise<{ id: string; slug: string; status: string } | null> {
+  if (slug) {
+    const [o] = await q<{ id: string; slug: string; status: string }>('select id, slug, status from orgs where lower(slug) = $1', [slug]);
+    return o ?? null;
+  }
+  const rows = await q<{ id: string; slug: string; status: string; is_platform: boolean }>(
+    'select id, slug, status, is_platform from orgs order by created_at');
+  const regular = rows.filter((o) => !o.is_platform);
+  if (regular.length === 1) return regular[0];
+  if (regular.length === 0 && rows.length === 1) return rows[0];
+  return null;
+}

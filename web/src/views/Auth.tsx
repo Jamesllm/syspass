@@ -4,7 +4,7 @@ import { useAction } from '../hooks';
 import { api } from '../lib/api';
 import { applyAccent, rememberOrg, rememberedOrg, slugify } from '../lib/brand';
 import { navigate } from '../lib/router';
-import type { User } from '../lib/types';
+import type { AppConfig, User } from '../lib/types';
 
 type PublicOrg = { name: string; logo: string | null; accent: string | null };
 
@@ -27,32 +27,36 @@ function AuthLayout({ brand, title, text, children, foot }: {
   );
 }
 
-/** Busca la marca pública de una empresa mientras se escribe su código. */
-function usePublicOrg(slug: string) {
-  const [org, setOrg] = useState<PublicOrg | null>(null);
+/** Busca la marca pública de una empresa mientras se escribe su código (o usa la fija del modo una empresa). */
+function usePublicOrg(slug: string, fixed: PublicOrg | null) {
+  const [found, setOrg] = useState<PublicOrg | null>(null);
+  const org = fixed ?? found;
   useEffect(() => {
+    if (fixed) return;
     const s = slug.trim().toLowerCase();
     if (s.length < 3) { setOrg(null); return; }
     const t = setTimeout(() => {
       api<PublicOrg>(`/api/public/orgs/${encodeURIComponent(s)}`).then(setOrg).catch(() => setOrg(null));
     }, 300);
     return () => clearTimeout(t);
-  }, [slug]);
+  }, [slug, fixed]);
   useEffect(() => { applyAccent(org?.accent ?? null); }, [org]);
   return org;
 }
 
-export function Login({ onLogin }: { onLogin: () => void }) {
+export function Login({ config, onLogin }: { config: AppConfig; onLogin: () => void }) {
+  const single = config.mode === 'single';
   const { run, busy, error } = useAction();
   const [org, setOrg] = useState(rememberedOrg);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const brand = usePublicOrg(org);
+  const brand = usePublicOrg(single ? '' : org, single ? config.org : null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const ok = await run(() => api('/api/auth/login', { body: { org, username, password } }));
-    if (ok) { rememberOrg(org.trim().toLowerCase()); onLogin(); } else setPassword('');
+    const body = single ? { username, password } : { org, username, password };
+    const ok = await run(() => api('/api/auth/login', { body }));
+    if (ok) { if (!single) rememberOrg(org.trim().toLowerCase()); onLogin(); } else setPassword('');
   }
 
   return (
@@ -60,15 +64,17 @@ export function Login({ onLogin }: { onLogin: () => void }) {
       brand={brand ? <span className="auth-org"><OrgMark name={brand.name} logo={brand.logo} size={40} /><Logo /></span> : undefined}
       title={brand ? `Entrar a ${brand.name}` : 'Entrar a SysPass'}
       text="Los accesos de tus clientes y plataformas, cifrados y auditados"
-      foot={<>¿Tu empresa aún no usa SysPass? <a href="/registro" onClick={(e) => { e.preventDefault(); navigate('/registro'); }}>Regístrala</a></>}
+      foot={single ? undefined : <>¿Tu empresa aún no usa SysPass? <a href="/registro" onClick={(e) => { e.preventDefault(); navigate('/registro'); }}>Regístrala</a></>}
     >
       <form onSubmit={submit} className="stack">
-        <Field label="Empresa" hint={!org ? 'El código que tu administrador te dio, por ejemplo drago' : undefined}>
-          <Input mono required autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="organization"
-            autoFocus={!org} placeholder="codigo-empresa" value={org} onChange={(e) => setOrg(e.target.value.toLowerCase())} />
-        </Field>
+        {!single && (
+          <Field label="Empresa" hint={!org ? 'El código que tu administrador te dio, por ejemplo drago' : undefined}>
+            <Input mono required autoCapitalize="off" autoCorrect="off" spellCheck={false} autoComplete="organization"
+              autoFocus={!org} placeholder="codigo-empresa" value={org} onChange={(e) => setOrg(e.target.value.toLowerCase())} />
+          </Field>
+        )}
         <Field label="Usuario">
-          <Input autoComplete="username" autoCapitalize="off" autoCorrect="off" autoFocus={!!org} required value={username} onChange={(e) => setUsername(e.target.value)} />
+          <Input autoComplete="username" autoCapitalize="off" autoCorrect="off" autoFocus={single || !!org} required value={username} onChange={(e) => setUsername(e.target.value)} />
         </Field>
         <Field label="Contraseña">
           <PasswordInput autoComplete="current-password" required value={password} onChange={setPassword} />

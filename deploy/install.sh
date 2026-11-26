@@ -133,6 +133,28 @@ else
   warn 'Sin dominio el tráfico va sin cifrar. Úsalo solo dentro de la red interna o la VPN.'
 fi
 
+# ── Tipo de instalación ──────────────────────────────────────
+step 'Tipo de instalación'
+if [ -z "${SYSPASS_MODE:-}" ]; then
+  info '1) Una sola empresa: tu equipo entra solo con usuario y contraseña'
+  info '2) Multiempresa (SaaS): varias empresas se registran y entran con su código'
+  ask MODE_CHOICE 'Elige 1 o 2' '1'
+  case "$MODE_CHOICE" in 2) SYSPASS_MODE=multi ;; *) SYSPASS_MODE=single ;; esac
+fi
+case "$SYSPASS_MODE" in single|multi) ;; *) die 'SYSPASS_MODE debe ser single o multi.' ;; esac
+SYSPASS_ORG=''
+if [ "$SYSPASS_MODE" = single ]; then
+  ask ORG_NAME 'Nombre de tu empresa' 'Mi Empresa'
+  # Código interno (no se pide al entrar): "Mi Empresa S.A.C." → mi-empresa-sac
+  SYSPASS_ORG="$(printf '%s' "$ORG_NAME" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null || printf '%s' "$ORG_NAME")"
+  SYSPASS_ORG="$(printf '%s' "$SYSPASS_ORG" | tr '[:upper:]' '[:lower:]' | tr -d "'\`^~\"" | sed -e 's/\.//g' -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/^-*//' -e 's/-*$//' | cut -c1-32 | sed 's/-*$//')"
+  [ ${#SYSPASS_ORG} -ge 3 ] || SYSPASS_ORG='empresa'
+  case "$SYSPASS_ORG" in syspass|admin|api|www|app|registro|login|soporte|support|root|system|platform) SYSPASS_ORG="$SYSPASS_ORG-empresa" ;; esac
+  info "Una sola empresa: $ORG_NAME"
+else
+  info 'Multiempresa: registro público en /registro'
+fi
+
 # ── 3. Base de datos ─────────────────────────────────────────
 step 'Base de datos'
 if [ -z "${DB_MODE:-}" ]; then
@@ -229,10 +251,16 @@ else
   info "Conectado a PostgreSQL $PG_MAJOR en $DB_HOST_SHOWN:$DB_PORT/$DB_NAME"
 fi
 
-# ── 4. Dueño de la plataforma ────────────────────────────────
-step 'Cuenta del dueño'
-ask OWNER_USER 'Usuario del dueño de la plataforma' 'admin'
-ask OWNER_NAME 'Nombre del dueño' 'Administrador SysPass'
+# ── 4. Cuenta inicial ────────────────────────────────────────
+if [ "$SYSPASS_MODE" = single ]; then
+  step 'Administrador de la empresa'
+  ask OWNER_USER 'Usuario administrador' 'admin'
+  ask OWNER_NAME 'Nombre del administrador' 'Administrador'
+else
+  step 'Cuenta del dueño de la plataforma'
+  ask OWNER_USER 'Usuario del dueño de la plataforma' 'admin'
+  ask OWNER_NAME 'Nombre del dueño' 'Administrador SysPass'
+fi
 
 # ── 5. Archivos ──────────────────────────────────────────────
 step "Creando $SYSPASS_DIR"
@@ -271,6 +299,10 @@ umask 077
   kv TRUST_PROXY "$TRUST_PROXY"
   kv SESSION_IDLE_MINUTES 30
   kv SESSION_MAX_HOURS 12
+  echo
+  echo '# single = una sola empresa (el login no pide código) · multi = varias empresas (SaaS)'
+  kv SYSPASS_MODE "$SYSPASS_MODE"
+  kv SYSPASS_ORG "$SYSPASS_ORG"
 } > .env
 umask 022
 
@@ -309,6 +341,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       VAULT_KEY: ${VAULT_KEY}
+      SYSPASS_MODE: ${SYSPASS_MODE:-multi}
+      SYSPASS_ORG: ${SYSPASS_ORG:-}
       SECURE_COOKIES: ${SECURE_COOKIES:-false}
       TRUST_PROXY: ${TRUST_PROXY:-false}
       SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
@@ -363,6 +397,7 @@ DB_PASSWORD="${DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
 PG_CLIENT_IMAGE="${PG_CLIENT_IMAGE:-postgres:17-alpine}"
 SYSPASS_SOURCE="${SYSPASS_SOURCE:-}"
 SYSPASS_INSTALLER_URL="${SYSPASS_INSTALLER_URL:-https://github.com/Jamesllm/syspass/releases/latest/download/install.sh}"
+SYSPASS_MODE="${SYSPASS_MODE:-multi}"; SYSPASS_ORG="${SYSPASS_ORG:-}"
 
 dc() { docker compose --project-directory "$DIR" "$@"; }
 need_root() { [ "$(id -u)" -eq 0 ] || { echo 'Este comando necesita sudo.' >&2; exit 1; }; }
@@ -414,6 +449,48 @@ build_or_pull() {
 }
 
 ask_tty() { local a=''; [ -r /dev/tty ] && { read -r -p "$1" a < /dev/tty || true; }; printf '%s' "$a"; }
+
+# Cambia (o agrega) una variable en .env y la exporta para docker compose
+set_env() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1='$2'|" .env; else printf "%s='%s'\n" "$1" "$2" >> .env; fi
+  export "$1=$2"
+}
+
+# Las instalaciones anteriores a 1.2.0 no pasaban el modo al contenedor
+ensure_compose_env() {
+  grep -q 'SYSPASS_MODE:' docker-compose.yml && return 0
+  sed -i 's|^\([[:space:]]*\)VAULT_KEY: \${VAULT_KEY}$|&\n\1SYSPASS_MODE: ${SYSPASS_MODE:-multi}\n\1SYSPASS_ORG: ${SYSPASS_ORG:-}|' docker-compose.yml
+  grep -q 'SYSPASS_MODE:' docker-compose.yml || { echo 'No pude agregar SYSPASS_MODE a docker-compose.yml' >&2; return 1; }
+}
+
+mode_cmd() {
+  need_root
+  local target="${1:-}" org="${2:-}" found
+  case "$target" in
+    '')
+      if [ "$SYSPASS_MODE" = single ]; then echo "Modo: una sola empresa ($SYSPASS_ORG)"; else echo 'Modo: multiempresa'; fi
+      echo 'Cambiar: sudo syspass mode single <codigo-empresa>  ·  sudo syspass mode multi' ;;
+    single)
+      [[ "$org" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo 'Uso: sudo syspass mode single <codigo-empresa>' >&2; exit 1; }
+      ensure_db
+      found="$(pg_tool psql -d "$DB_NAME" -tAc "select name from orgs where lower(slug) = '$org'" 2>/dev/null | head -n 1)"
+      if [ -z "$found" ]; then
+        echo "No existe una empresa con código \"$org\"." >&2
+        echo "Empresas: $(pg_tool psql -d "$DB_NAME" -tAc "select string_agg(slug, ', ' order by created_at) from orgs" 2>/dev/null)" >&2
+        exit 1
+      fi
+      ensure_compose_env
+      set_env SYSPASS_MODE single; set_env SYSPASS_ORG "$org"
+      dc up -d app && wait_healthy
+      echo "Listo: una sola empresa ($found). El login ya no pide código y el registro público está cerrado." ;;
+    multi)
+      ensure_compose_env
+      set_env SYSPASS_MODE multi; set_env SYSPASS_ORG ''
+      dc up -d app && wait_healthy
+      echo 'Listo: multiempresa. El login pide el código de empresa y /registro está abierto.' ;;
+    *) echo 'Uso: sudo syspass mode [single <codigo-empresa> | multi]' >&2; exit 1 ;;
+  esac
+}
 
 # Reemplaza este comando por el de la última versión del instalador.
 # Se escribe en un archivo temporal y se mueve (mv es atómico), así no se rompe el script en ejecución.
@@ -511,6 +588,7 @@ case "$cmd" in
   status)
     dc ps; echo
     echo "URL:            $PUBLIC_URL"
+    if [ "$SYSPASS_MODE" = single ]; then echo "Modo:           una sola empresa ($SYSPASS_ORG)"; else echo 'Modo:           multiempresa'; fi
     if [ "$DB_MODE" = external ]; then echo "Base de datos:  PostgreSQL existente ($DB_USER@$DB_HOST:$DB_PORT/$DB_NAME)"
     else echo 'Base de datos:  PostgreSQL incorporado (contenedor db)'; fi ;;
   logs)     dc logs -f --tail=200 "${@:-app}" ;;
@@ -527,6 +605,7 @@ case "$cmd" in
     echo 'Respaldo previo a la actualización'; backup
     old_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
     build_or_pull
+    ensure_compose_env || true
     dc up -d && wait_healthy
     # Borra solo la imagen anterior de SysPass (no toca imágenes de otros proyectos del servidor)
     new_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
@@ -535,12 +614,15 @@ case "$cmd" in
     echo 'SysPass actualizado (las migraciones se aplican solas)' ;;
   self-update) self_update ;;
   admin)
+    # En modo una sola empresa el código es opcional
+    if [ "$SYSPASS_MODE" = single ] && [ -n "$SYSPASS_ORG" ] && [ "${1:-}" != "$SYSPASS_ORG" ]; then set -- "$SYSPASS_ORG" "$@"; fi
     [ $# -ge 2 ] || { echo 'Uso: syspass admin <codigo-empresa> <usuario> "Nombre"' >&2; exit 1; }
     dc exec -T app node dist/scripts/create-admin.js "$@" ;;
   owner)
     [ $# -ge 1 ] || { echo 'Uso: syspass owner <usuario> "Nombre"' >&2; exit 1; }
     dc exec -T app node dist/scripts/platform-init.js "$@" ;;
   url)       echo "$PUBLIC_URL" ;;
+  mode)      mode_cmd "$@" ;;
   uninstall) uninstall "$@" ;;
   *)
     cat <<'HELP'
@@ -554,6 +636,10 @@ SysPass · comandos
   syspass upgrade                              Respaldo + nueva versión + migraciones + este comando
   syspass self-update                          Actualizar solo este comando
   syspass admin <empresa> <usuario> "Nombre"   Crear o restablecer el admin de una empresa
+                                               (en modo una empresa: syspass admin <usuario> "Nombre")
+  syspass mode                                 Ver el modo: una empresa o multiempresa
+  syspass mode single <empresa>                Una sola empresa: el login no pide código
+  syspass mode multi                           Multiempresa: login con código y registro público
   syspass owner <usuario> "Nombre"             Crear o restablecer un dueño de la plataforma
   syspass uninstall                            Quitar los contenedores y conservar los datos
   syspass uninstall --purge [--yes]            Borrar todo (ofrece un respaldo final antes)
@@ -577,8 +663,13 @@ fi
 step 'Iniciando SysPass'
 SYSPASS_DIR="$SYSPASS_DIR" "$BIN_LINK" start || die 'SysPass no arrancó. Revisa: syspass logs'
 
-step 'Creando la cuenta del dueño de la plataforma'
-OWNER_OUT="$(docker compose --project-directory "$SYSPASS_DIR" exec -T app node dist/scripts/platform-init.js "$OWNER_USER" "$OWNER_NAME")"
+if [ "$SYSPASS_MODE" = single ]; then
+  step "Creando la empresa $ORG_NAME y su administrador"
+  OWNER_OUT="$(docker compose --project-directory "$SYSPASS_DIR" exec -T app node dist/scripts/org-init.js "$SYSPASS_ORG" "$ORG_NAME" "$OWNER_USER" "$OWNER_NAME")"
+else
+  step 'Creando la cuenta del dueño de la plataforma'
+  OWNER_OUT="$(docker compose --project-directory "$SYSPASS_DIR" exec -T app node dist/scripts/platform-init.js "$OWNER_USER" "$OWNER_NAME")"
+fi
 TEMP_PASS="$(printf '%s\n' "$OWNER_OUT" | sed -n 's/^Contraseña temporal: //p')"
 
 DB_LINE='PostgreSQL incorporado'
@@ -589,12 +680,11 @@ cat <<EOF
 ${G}${B}SysPass está instalado${N}
 
   Dirección      ${B}$PUBLIC_URL${N}
-  Empresa        ${B}syspass${N}
+$(if [ "$SYSPASS_MODE" = single ]; then echo "  Empresa        ${B}$ORG_NAME${N}  (una sola empresa: el login no la pide)"; else echo "  Empresa        ${B}syspass${N}"; fi)
   Usuario        ${B}$OWNER_USER${N}
   Contraseña     ${B}$TEMP_PASS${N}  (temporal, te pedirá cambiarla)
   Base de datos  $DB_LINE
-
-  Las empresas se registran en ${B}$PUBLIC_URL/registro${N}
+$(if [ "$SYSPASS_MODE" = multi ]; then printf '\n  Las empresas se registran en %s\n' "${B}$PUBLIC_URL/registro${N}"; fi)
 
   ${Y}Importante:${N} copia la línea VAULT_KEY de $SYSPASS_DIR/.env a un lugar
   seguro fuera de este servidor. Sin ella los datos no se pueden recuperar.

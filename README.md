@@ -21,7 +21,7 @@ Guarda los accesos de cada cliente —servidores, NAS, VPN, correos, plataformas
 
 | | |
 |---|---|
-| **Multiempresa** | Cada empresa se registra en `/registro` y entra con su propio código. Sus datos, usuarios y llave de cifrado están aislados del resto. |
+| **Una empresa o multiempresa** | Para tu propia empresa, el equipo entra solo con usuario y contraseña. Como SaaS, cada empresa se registra en `/registro` y entra con su código, con datos, usuarios y llave de cifrado aislados. |
 | **Marca propia** | Cada empresa usa su nombre, su logo y su color. El color se ajusta solo para mantener buen contraste en modo claro y oscuro. |
 | **Clientes y recursos** | Organiza los accesos por cliente y tipo (servidor, NAS, VPN, hipervisor, correo, plataforma web…), con varias cuentas por recurso. |
 | **Permisos** | Roles *administrador*, *editor* y *solo lectura*, con asignación de clientes por usuario. |
@@ -75,6 +75,26 @@ Todo queda en `/opt/syspass`.
 > [!TIP]
 > Para que el dominio funcione, crea antes un registro DNS **A** apuntando a la IP pública del servidor y abre los puertos 80 y 443 en el firewall.
 
+### Una empresa o multiempresa
+
+El instalador pregunta qué tipo de instalación quieres:
+
+| | Una sola empresa | Multiempresa (SaaS) |
+|---|---|---|
+| Para quién | Tu propia empresa | Varias empresas en la misma instalación |
+| Inicio de sesión | Usuario y contraseña | Código de empresa, usuario y contraseña |
+| Registro en `/registro` | Cerrado | Abierto para que se registren empresas |
+| Primera cuenta | Administrador de tu empresa | Dueño de la plataforma (empresa `syspass`) |
+| Panel **Empresas** | No | Sí, para el dueño |
+
+Se puede cambiar después sin reinstalar ni perder datos:
+
+```bash
+sudo syspass mode                     # ver el modo actual
+sudo syspass mode single drago        # una sola empresa: la de código "drago"
+sudo syspass mode multi               # volver a multiempresa
+```
+
 ### Base de datos: incorporada o existente
 
 | | PostgreSQL incorporado | PostgreSQL existente |
@@ -126,13 +146,15 @@ curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.
 | `DOMAIN` | Dominio público; vacío = acceso por IP | vacío |
 | `ACME_EMAIL` | Correo para avisos del certificado | vacío |
 | `APP_PORT` | Puerto web cuando no hay dominio | `80` |
+| `SYSPASS_MODE` | `single` (una sola empresa) o `multi` (SaaS) | pregunta |
+| `ORG_NAME` | Nombre de la empresa en modo `single` | pregunta |
 | `DB_MODE` | `builtin` (incorporado) o `external` (existente) | pregunta |
 | `DB_HOST` / `DB_PORT` | Servidor PostgreSQL existente | `localhost` / `5432` |
 | `DB_NAME` / `DB_USER` | Base y usuario para SysPass | `syspass` |
 | `DB_PASSWORD` | Contraseña del usuario. Si el instalador lo crea, se genera sola | — |
 | `DB_CREATE` | `s` para crear la base y el usuario con un superusuario | pregunta |
 | `DB_ADMIN_USER` / `DB_ADMIN_PASSWORD` | Superusuario para crearlos (no se guarda) | `postgres` |
-| `OWNER_USER` / `OWNER_NAME` | Cuenta del dueño de la plataforma | `admin` |
+| `OWNER_USER` / `OWNER_NAME` | Primera cuenta: administrador de tu empresa (`single`) o dueño de la plataforma (`multi`) | `admin` |
 | `SYSPASS_DIR` | Carpeta de instalación | `/opt/syspass` |
 
 ### Desde el código fuente
@@ -166,6 +188,7 @@ El instalador deja el comando `syspass` disponible en el servidor:
 | `syspass upgrade` | Respaldo, nueva versión y migraciones automáticas |
 | `syspass admin <empresa> <usuario> "Nombre"` | Crea o restablece el administrador de una empresa |
 | `syspass owner <usuario> "Nombre"` | Crea o restablece un dueño de la plataforma |
+| `syspass mode [single <empresa> \| multi]` | Ver o cambiar el modo: una sola empresa o multiempresa |
 | `syspass uninstall` | Quita los contenedores y **conserva** datos, configuración y respaldos |
 | `syspass uninstall --purge` | Borra todo. Antes ofrece guardar un respaldo final |
 
@@ -290,6 +313,8 @@ npm run dev:web                 # Frontend en http://localhost:5173
 | `SESSION_MAX_HOURS` | Duración máxima de una sesión | `12` |
 | `CORS_ORIGINS` | Orígenes permitidos si el frontend está en otro dominio | vacío |
 | `SERVE_WEB` | `false` para no servir el frontend desde la API | `true` |
+| `SYSPASS_MODE` | `single` (una sola empresa) o `multi` (SaaS) | `multi` |
+| `SYSPASS_ORG` | Código de la empresa en modo `single`; vacío = se detecta si hay una sola | vacío |
 
 ### Importar credenciales desde texto
 

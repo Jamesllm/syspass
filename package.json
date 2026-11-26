@@ -15,6 +15,7 @@
     "migrate": "npm run migrate -w server",
     "admin:create": "npm run admin:create -w server --",
     "keygen": "node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
-    "platform:init": "npm run platform:init -w server --"
+    "platform:init": "npm run platform:init -w server --",
+    "org:init": "npm run org:init -w server --"
   }
 }

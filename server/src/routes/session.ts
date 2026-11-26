@@ -5,14 +5,15 @@ import { COOKIE, HttpError, cookieOptions, requireUser } from '../auth.js';
 import { config } from '../config.js';
 import { DUMMY_HASH, hashPassword, newToken, sha256, verifyPassword } from '../crypto.js';
 import { q, tx, type Db } from '../db.js';
-import { Slug, createOrg, isReserved, orgBrand } from '../orgs.js';
+import { Slug, createOrg, isReserved, orgBrand, singleOrg } from '../orgs.js';
 
 const Password = z.string().min(12, 'La contraseña debe tener al menos 12 caracteres').max(200);
 const Username = z.string().trim().min(3, 'El usuario debe tener al menos 3 caracteres').max(60)
   .regex(/^[a-zA-Z0-9._@-]+$/, 'Usuario: solo letras, números y . _ @ -');
 
 const Login = z.object({
-  org: z.string().trim().toLowerCase().min(1, 'Escribe el código de tu empresa').max(40),
+  /** En modo una sola empresa no se envía */
+  org: z.string().trim().toLowerCase().max(40).default(''),
   username: z.string().trim().min(1).max(80),
   password: z.string().min(1).max(200),
 });
@@ -38,16 +39,24 @@ async function startSession(req: FastifyRequest, reply: FastifyReply, userId: st
 export async function sessionRoutes(app: FastifyInstance) {
   app.post('/api/auth/login', { config: { rateLimit: { max: 8, timeWindow: '5 minutes' } } }, async (req, reply) => {
     const body = Login.parse(req.body);
+    let orgSlug = body.org;
+    if (config.mode === 'single') {
+      const o = await singleOrg(config.singleOrg);
+      if (!o) throw new HttpError(503, 'SysPass está en modo de una sola empresa pero no encuentra cuál. Revisa SYSPASS_ORG');
+      orgSlug = o.slug.toLowerCase();
+    } else if (!orgSlug) {
+      throw new HttpError(400, 'Escribe el código de tu empresa');
+    }
     const [u] = await q<{ id: string; username: string; pass_hash: string; active: boolean; org_id: string; org_status: string }>(
       `select u.id, u.username, u.pass_hash, u.active, u.org_id, o.status as org_status
          from users u join orgs o on o.id = u.org_id
         where lower(o.slug) = $1 and lower(u.username) = lower($2)`,
-      [body.org, body.username],
+      [orgSlug, body.username],
     );
     const ok = await verifyPassword(body.password, u?.pass_hash ?? DUMMY_HASH);
     if (!u || !ok || !u.active) {
       if (u) await audit(req, 'login.fail', { summary: body.username }, undefined, { id: u.id, username: body.username, orgId: u.org_id });
-      throw new HttpError(401, 'Empresa, usuario o contraseña incorrectos');
+      throw new HttpError(401, config.mode === 'single' ? 'Usuario o contraseña incorrectos' : 'Empresa, usuario o contraseña incorrectos');
     }
     if (u.org_status !== 'active') throw new HttpError(403, 'Esta empresa está suspendida. Escribe a soporte de SysPass');
     await startSession(req, reply, u.id);
@@ -59,6 +68,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
   /** Registro público de una empresa con su primer administrador. */
   app.post('/api/auth/register', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (req, reply) => {
+    if (config.mode === 'single') throw new HttpError(403, 'El registro de empresas está desactivado en esta instalación');
     const body = Register.parse(req.body);
     if (isReserved(body.slug)) throw new HttpError(409, 'Ese código está reservado, elige otro', 'slug');
     const [taken] = await q('select 1 from orgs where lower(slug) = $1', [body.slug]);
@@ -88,6 +98,7 @@ export async function sessionRoutes(app: FastifyInstance) {
     return {
       user: { id: u.id, username: u.username, name: u.name, role: u.role, mustChange: u.mustChange },
       org,
+      mode: config.mode,
       idleMinutes: config.idleMinutes,
     };
   });
@@ -104,7 +115,18 @@ export async function sessionRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  /* ── Públicas: marca de una empresa (login) y disponibilidad de código (registro) ── */
+  /* ── Públicas: modo de la instalación, marca de una empresa (login) y disponibilidad de código (registro) ── */
+
+  /** Lo que el login necesita saber antes de iniciar sesión */
+  app.get('/api/public/config', async () => {
+    if (config.mode !== 'single') return { mode: 'multi', org: null };
+    const o = await singleOrg(config.singleOrg);
+    if (!o) return { mode: 'single', org: null };
+    const [b] = await q<{ name: string; logo: string | null; accent: string | null }>(
+      'select name, logo, accent from orgs where id = $1', [o.id]);
+    return { mode: 'single', org: b };
+  });
+
 
   app.get('/api/public/orgs/:slug', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req) => {
     const slug = String((req.params as { slug: string }).slug).toLowerCase();
@@ -115,6 +137,7 @@ export async function sessionRoutes(app: FastifyInstance) {
   });
 
   app.get('/api/public/slug-available', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req) => {
+    if (config.mode === 'single') return { available: false, reason: 'Registro desactivado' };
     const parsed = Slug.safeParse((req.query as { slug?: string }).slug ?? '');
     if (!parsed.success) return { available: false, reason: parsed.error.issues[0]?.message };
     if (isReserved(parsed.data)) return { available: false, reason: 'Código reservado' };

@@ -5,7 +5,7 @@ import { useAction } from '../hooks';
 import { api } from '../lib/api';
 import { PRESET_ACCENTS, accentVariants, applyAccent } from '../lib/brand';
 import { cx } from '../lib/format';
-import type { Org } from '../lib/types';
+import type { AppMode, Org } from '../lib/types';
 
 const MAX_LOGO = 200 * 1024;
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
@@ -17,7 +17,7 @@ const readAsDataUrl = (f: File) => new Promise<string>((res, rej) => {
   r.readAsDataURL(f);
 });
 
-export function OrgSettingsView({ org, onSaved }: { org: Org; onSaved: (o: Org) => void }) {
+export function OrgSettingsView({ org, mode, onSaved }: { org: Org; mode: AppMode; onSaved: (o: Org) => void }) {
   const toast = useToast();
   const { run, busy, error, setError } = useAction();
   const [name, setName] = useState(org.name);
@@ -99,7 +99,7 @@ export function OrgSettingsView({ org, onSaved }: { org: Org; onSaved: (o: Org) 
               <span className="pw shown"><PasswordText value="Kq7#vXm2-Lpw9Rz" /></span>
             </div>
           </Panel>
-          <Panel title="Acceso del equipo">
+          {mode === 'multi' && <Panel title="Acceso del equipo">
             <div className="panel-body stack">
               <p className="sec">Tu equipo entra con este código de empresa, su usuario y su contraseña</p>
               <div className="code-row">
@@ -107,7 +107,7 @@ export function OrgSettingsView({ org, onSaved }: { org: Org; onSaved: (o: Org) 
                 <CopyButton value={org.slug} label="Copiar código" done="Código copiado" />
               </div>
             </div>
-          </Panel>
+          </Panel>}
         </div>
       </div>
     </>

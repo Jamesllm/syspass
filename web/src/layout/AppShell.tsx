@@ -4,7 +4,7 @@ import { Building2, FileUp, Globe, KeyRound, Layers, LogOut, Menu, Palette, Plus
 import { BottomSheet, ICON, OrgBrand } from '../components';
 import { useIsMobile } from '../hooks';
 import { cx } from '../lib/format';
-import { ROLE_LABEL, type Client, type Org, type User } from '../lib/types';
+import { ROLE_LABEL, type AppMode, type Client, type Org, type User } from '../lib/types';
 
 export type View =
   | { kind: 'vault'; clientId: string | 'all' }
@@ -49,9 +49,10 @@ function TabItem({ icon: Icon, label, active, badge, onClick }: { icon: LucideIc
   );
 }
 
-export function AppShell({ user, org, clients, counts, totalResources, issueCount, view, onNavigate, onNewClient, onChangePassword, onLogout, children }: {
+export function AppShell({ user, org, mode, clients, counts, totalResources, issueCount, view, onNavigate, onNewClient, onChangePassword, onLogout, children }: {
   user: User;
   org: Org;
+  mode: AppMode;
   clients: Client[];
   counts: Map<string, number>;
   totalResources: number;
@@ -68,13 +69,15 @@ export function AppShell({ user, org, clients, counts, totalResources, issueCoun
   const isAdmin = user.role === 'admin';
   const is = (kind: View['kind']) => view.kind === kind;
   const isClient = (id: string) => view.kind === 'vault' && view.clientId === id;
+  // El panel de empresas solo existe en modo multiempresa
+  const isPlatform = org.isPlatform && mode === 'multi';
 
   const adminItems: NavItemProps[] = isAdmin ? [
     { icon: Users, label: 'Usuarios', active: is('users'), onClick: () => onNavigate({ kind: 'users' }) },
     { icon: ScrollText, label: 'Auditoría', active: is('audit'), onClick: () => onNavigate({ kind: 'audit' }) },
     { icon: FileUp, label: 'Importar', active: is('import'), onClick: () => onNavigate({ kind: 'import' }) },
     { icon: Palette, label: 'Empresa', active: is('settings'), onClick: () => onNavigate({ kind: 'settings' }) },
-    ...(org.isPlatform ? [{ icon: Globe, label: 'Empresas', active: is('platform'), onClick: () => onNavigate({ kind: 'platform' }) }] : []),
+    ...(isPlatform ? [{ icon: Globe, label: 'Empresas', active: is('platform'), onClick: () => onNavigate({ kind: 'platform' }) }] : []),
   ] : [];
   const accountItems: NavItemProps[] = [
     { icon: KeyRound, label: 'Cambiar contraseña', onClick: onChangePassword },
@@ -92,7 +95,7 @@ export function AppShell({ user, org, clients, counts, totalResources, issueCoun
     const close = (fn: () => void) => () => { setMoreOpen(false); fn(); };
     return (
       <div className="shell mobile">
-        <header className="topbar"><OrgBrand name={org.name} logo={org.logo} platform={org.isPlatform} /></header>
+        <header className="topbar"><OrgBrand name={org.name} logo={org.logo} platform={isPlatform} /></header>
         <main className="main">{children}</main>
         <nav className="tabbar" aria-label="Secciones">
           <TabItem icon={Layers} label="Bóveda" active={is('vault')} onClick={() => onNavigate({ kind: 'vault', clientId: view.kind === 'vault' ? view.clientId : 'all' })} />
@@ -120,7 +123,7 @@ export function AppShell({ user, org, clients, counts, totalResources, issueCoun
   return (
     <div className="shell">
       <aside className="side">
-        <OrgBrand name={org.name} logo={org.logo} platform={org.isPlatform} />
+        <OrgBrand name={org.name} logo={org.logo} platform={isPlatform} />
         <div className="nav-label">Bóveda</div>
         <nav className="nav">
           <NavItem icon={Layers} label="Todos los clientes" count={totalResources} active={isClient('all')} onClick={() => onNavigate({ kind: 'vault', clientId: 'all' })} />

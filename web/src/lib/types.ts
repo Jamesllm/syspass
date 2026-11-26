@@ -82,3 +82,11 @@ export interface Org {
   accent: string | null;
   isPlatform: boolean;
 }
+
+/** Modo de la instalación: una sola empresa o varias (SaaS) */
+export type AppMode = 'single' | 'multi';
+export interface AppConfig {
+  mode: AppMode;
+  /** Marca de la empresa única (modo single) */
+  org: { name: string; logo: string | null; accent: string | null } | null;
+}

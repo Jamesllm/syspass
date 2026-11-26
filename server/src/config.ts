@@ -23,4 +23,11 @@ export const config = {
   idleMinutes: Number(process.env.SESSION_IDLE_MINUTES ?? 30),
   /** horas máximas de una sesión aunque haya actividad */
   maxHours: Number(process.env.SESSION_MAX_HOURS ?? 12),
+  /**
+   * single = una sola empresa: el login no pide código y el registro público está cerrado.
+   * multi  = varias empresas (SaaS): cada una se registra y entra con su código.
+   */
+  mode: (process.env.SYSPASS_MODE ?? 'multi').trim().toLowerCase() === 'single' ? 'single' as const : 'multi' as const,
+  /** Código de la empresa en modo single. Vacío = se detecta sola si hay una única empresa */
+  singleOrg: (process.env.SYSPASS_ORG ?? '').trim().toLowerCase(),
 };
