@@ -36,6 +36,9 @@ await app.register(helmet, {
     },
   },
   hsts: config.secureCookies,
+  // Estas dos cabeceras solo tienen efecto con HTTPS; por HTTP el navegador las ignora y avisa en consola
+  crossOriginOpenerPolicy: config.secureCookies,
+  originAgentCluster: config.secureCookies,
 });
 if (config.corsOrigins.length) {
   await app.register(cors, { origin: config.corsOrigins, credentials: true, allowedHeaders: ['content-type', 'x-dv'] });

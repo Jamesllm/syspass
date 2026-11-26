@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Button, Confirm, Field, FieldRow, FormError, IconButton, Input, PasswordInput, Select, Sheet, TextArea, useToast } from '../components';
 import { useAction } from '../hooks';
 import { api } from '../lib/api';
+import { newId } from '../lib/format';
 import { TYPES, type Client, type Resource, type ResourceType } from '../lib/types';
 
 interface AccDraft {
@@ -17,7 +18,7 @@ interface AccDraft {
 
 const ROLE_SUGGESTIONS = ['Administrador', 'Soporte', 'Root', 'Usuario', 'Invitado', 'Gerencia', 'Sistemas'];
 const TYPE_OPTIONS = TYPES.map((t) => ({ value: t.id, label: t.label }));
-const blankAcc = (): AccDraft => ({ key: crypto.randomUUID(), role: '', username: '', password: '', hasPassword: false, notes: '' });
+const blankAcc = (): AccDraft => ({ key: newId(), role: '', username: '', password: '', hasPassword: false, notes: '' });
 
 export function ResourceSheet({ resource, clients, defaultClientId, onClose, onSaved }: {
   resource: Resource | null;

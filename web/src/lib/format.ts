@@ -1,3 +1,13 @@
+/**
+ * Identificador aleatorio para claves de React.
+ * No usa crypto.randomUUID(): el navegador solo lo permite con HTTPS o localhost,
+ * y SysPass también se usa por HTTP dentro de la red (http://192.168.x.x).
+ */
+export function newId(): string {
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+}
+
 /** Une clases condicionales: cx('btn', primary && 'primary') */
 export const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
 
