@@ -347,7 +347,14 @@ BIN_LINK=/usr/local/bin/syspass
 [ -f "$DIR/.env" ] || { echo "No hay instalación de SysPass en $DIR" >&2; exit 1; }
 cd "$DIR"
 set -a; . ./.env; set +a
+# Valores por defecto: las instalaciones v1.0.0 no tenían estas variables en .env
 DB_MODE="${DB_MODE:-builtin}"
+DB_HOST="${DB_HOST:-db}"; DB_PORT="${DB_PORT:-5432}"
+DB_NAME="${DB_NAME:-syspass}"; DB_USER="${DB_USER:-syspass}"
+DB_PASSWORD="${DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
+PG_CLIENT_IMAGE="${PG_CLIENT_IMAGE:-postgres:17-alpine}"
+SYSPASS_SOURCE="${SYSPASS_SOURCE:-}"
+SYSPASS_INSTALLER_URL="${SYSPASS_INSTALLER_URL:-https://github.com/Jamesllm/syspass/releases/latest/download/install.sh}"
 
 dc() { docker compose --project-directory "$DIR" "$@"; }
 need_root() { [ "$(id -u)" -eq 0 ] || { echo 'Este comando necesita sudo.' >&2; exit 1; }; }
@@ -399,6 +406,28 @@ build_or_pull() {
 }
 
 ask_tty() { local a=''; [ -r /dev/tty ] && { read -r -p "$1" a < /dev/tty || true; }; printf '%s' "$a"; }
+
+# Reemplaza este comando por el de la última versión del instalador.
+# Se escribe en un archivo temporal y se mueve (mv es atómico), así no se rompe el script en ejecución.
+self_update() {
+  need_root
+  local src tmp
+  tmp="$(mktemp)"
+  if [ -n "$SYSPASS_SOURCE" ] && [ -f "$SYSPASS_SOURCE/deploy/install.sh" ]; then
+    src="$SYSPASS_SOURCE/deploy/install.sh"
+  else
+    src="$(mktemp)"
+    curl -fsSL "$SYSPASS_INSTALLER_URL" -o "$src" || { echo 'No se pudo descargar el instalador.' >&2; rm -f "$tmp" "$src"; return 1; }
+  fi
+  sed -n "/^cat > syspass <<'CLI'\$/,/^CLI\$/p" "$src" | sed '1d;$d' > "$tmp"
+  [ "$src" = "$SYSPASS_SOURCE/deploy/install.sh" ] || rm -f "$src"
+  if [ ! -s "$tmp" ] || ! bash -n "$tmp"; then echo 'El comando descargado no es válido; se conserva el actual.' >&2; rm -f "$tmp"; return 1; fi
+  if cmp -s "$tmp" "$DIR/syspass"; then echo 'El comando syspass ya está al día.'; rm -f "$tmp"; return 0; fi
+  chmod 755 "$tmp"
+  mv -f "$tmp" "$DIR/syspass"
+  ln -sf "$DIR/syspass" "$BIN_LINK"
+  echo 'Comando syspass actualizado.'
+}
 
 uninstall() {
   need_root
@@ -486,11 +515,14 @@ case "$cmd" in
     pg_tool pg_restore -d "$DB_NAME" --clean --if-exists --no-owner < "$f"
     dc start app && wait_healthy ;;
   upgrade)
+    need_root
     echo 'Respaldo previo a la actualización'; backup
     build_or_pull
     dc up -d && wait_healthy
     docker image prune -f >/dev/null 2>&1 || true
+    self_update || echo 'Aviso: no se pudo actualizar el comando syspass (la app sí se actualizó).' >&2
     echo 'SysPass actualizado (las migraciones se aplican solas)' ;;
+  self-update) self_update ;;
   admin)
     [ $# -ge 2 ] || { echo 'Uso: syspass admin <codigo-empresa> <usuario> "Nombre"' >&2; exit 1; }
     dc exec -T app node dist/scripts/create-admin.js "$@" ;;
@@ -508,7 +540,8 @@ SysPass · comandos
   syspass url                                  Dirección pública
   syspass backup                               Respaldo de la base en backups/
   syspass restore backups/archivo.dump         Restaurar un respaldo
-  syspass upgrade                              Respaldo + nueva versión + migraciones
+  syspass upgrade                              Respaldo + nueva versión + migraciones + este comando
+  syspass self-update                          Actualizar solo este comando
   syspass admin <empresa> <usuario> "Nombre"   Crear o restablecer el admin de una empresa
   syspass owner <usuario> "Nombre"             Crear o restablecer un dueño de la plataforma
   syspass uninstall                            Quitar los contenedores y conservar los datos

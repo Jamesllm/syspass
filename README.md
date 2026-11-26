@@ -200,10 +200,24 @@ echo '0 2 * * * root /usr/local/bin/syspass backup' | sudo tee /etc/cron.d/syspa
 ### Actualizar
 
 ```bash
-syspass upgrade
+sudo syspass upgrade
 ```
 
-Hace un respaldo, descarga la imagen nueva, reinicia y aplica las migraciones pendientes.
+Hace un respaldo, descarga la imagen nueva, reinicia, aplica las migraciones pendientes y actualiza el propio comando `syspass`. Para actualizar solo el comando: `sudo syspass self-update`.
+
+#### Si instalaste la versión 1.0.0
+
+El comando `syspass` de la 1.0.0 no sabe actualizarse a sí mismo. Reemplázalo una vez y después usa `upgrade` como siempre:
+
+```bash
+curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.sh \
+  | sed -n "/^cat > syspass <<'CLI'$/,/^CLI$/p" | sed '1d;$d' > /tmp/syspass \
+  && bash -n /tmp/syspass && sudo install -m 755 /tmp/syspass /opt/syspass/syspass
+
+sudo syspass upgrade
+```
+
+Tus datos, la configuración y la `VAULT_KEY` no cambian. La instalación sigue usando el PostgreSQL incorporado.
 
 ---
 
