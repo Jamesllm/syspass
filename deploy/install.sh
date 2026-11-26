@@ -73,6 +73,12 @@ kv() {
   printf "%s='%s'\n" "$1" "$2"
 }
 
+# Todo el instalador vive en main(): bash lee la función completa antes de ejecutarla.
+# Así, con "curl … | bash", ningún comando puede "comerse" el resto del script desde la tubería.
+main() {
+# Las preguntas se leen de /dev/tty; nada más necesita la entrada estándar
+exec </dev/null
+
 # ── Desinstalar desde el propio instalador ───────────────────
 if [ "${1:-}" = --uninstall ]; then
   shift
@@ -345,6 +351,8 @@ set -euo pipefail
 DIR="${SYSPASS_DIR:-/opt/syspass}"
 BIN_LINK=/usr/local/bin/syspass
 [ -f "$DIR/.env" ] || { echo "No hay instalación de SysPass en $DIR" >&2; exit 1; }
+# .env guarda la VAULT_KEY y solo root puede leerlo
+[ -r "$DIR/.env" ] || { echo "Usa sudo: sudo syspass ${*:-help}" >&2; exit 1; }
 cd "$DIR"
 set -a; . ./.env; set +a
 # Valores por defecto: las instalaciones v1.0.0 no tenían estas variables en .env
@@ -517,9 +525,12 @@ case "$cmd" in
   upgrade)
     need_root
     echo 'Respaldo previo a la actualización'; backup
+    old_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
     build_or_pull
     dc up -d && wait_healthy
-    docker image prune -f >/dev/null 2>&1 || true
+    # Borra solo la imagen anterior de SysPass (no toca imágenes de otros proyectos del servidor)
+    new_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
+    if [ -n "$old_image" ] && [ "$old_image" != "$new_image" ]; then docker image rm "$old_image" >/dev/null 2>&1 || true; fi
     self_update || echo 'Aviso: no se pudo actualizar el comando syspass (la app sí se actualizó).' >&2
     echo 'SysPass actualizado (las migraciones se aplican solas)' ;;
   self-update) self_update ;;
@@ -590,3 +601,6 @@ ${G}${B}SysPass está instalado${N}
 
   Comandos: ${B}syspass status${N} · ${B}syspass logs${N} · ${B}syspass backup${N} · ${B}syspass upgrade${N} · ${B}syspass uninstall${N}
 EOF
+}
+
+main "$@"
