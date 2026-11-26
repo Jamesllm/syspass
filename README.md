@@ -39,7 +39,8 @@ Guarda los accesos de cada cliente —servidores, NAS, VPN, correos, plataformas
 
 - Servidor **Linux** (Ubuntu 22.04+, Debian 12+, Rocky/Alma 9+) con **1 GB de RAM** y 5 GB de disco
 - Acceso `sudo`
-- Docker 24+ con Compose v2. Si no está instalado, el instalador ofrece instalarlo.
+- Docker 24+ con Compose 2.20 o superior. Si no está instalado, el instalador ofrece instalarlo.
+- *(Opcional)* Un PostgreSQL 13+ propio, si no quieres usar el incorporado
 - *(Opcional)* Un dominio apuntando al servidor, para tener HTTPS
 
 ### Un comando
@@ -52,9 +53,9 @@ curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.
 El instalador:
 
 1. Comprueba Docker y lo instala si falta.
-2. Pregunta el **dominio** y el usuario dueño de la plataforma.
-3. Genera la llave maestra de cifrado y la contraseña de la base de datos.
-4. Levanta SysPass, PostgreSQL y, si hay dominio, Caddy con certificado HTTPS automático.
+2. Pregunta el **dominio**, la **base de datos** (incorporada o un PostgreSQL que ya tengas) y el usuario dueño de la plataforma.
+3. Genera la llave maestra de cifrado y las contraseñas necesarias.
+4. Levanta SysPass, PostgreSQL (si es el incorporado) y, si hay dominio, Caddy con certificado HTTPS automático.
 5. Muestra la dirección de acceso y una contraseña temporal para el dueño.
 
 Todo queda en `/opt/syspass`.
@@ -74,6 +75,31 @@ Todo queda en `/opt/syspass`.
 > [!TIP]
 > Para que el dominio funcione, crea antes un registro DNS **A** apuntando a la IP pública del servidor y abre los puertos 80 y 443 en el firewall.
 
+### Base de datos: incorporada o existente
+
+| | PostgreSQL incorporado | PostgreSQL existente |
+|---|---|---|
+| Qué instala | Un contenedor PostgreSQL 17 con su volumen | Nada: usa tu servidor PostgreSQL |
+| Dónde | Dentro de Docker | En este mismo servidor o en otro |
+| Versión | 17 | 13 o superior |
+| Respaldos `syspass backup` | Sí | Sí, con un cliente de la misma versión que tu servidor |
+| Recomendado para | La mayoría de instalaciones | Equipos que ya administran PostgreSQL, con sus propias réplicas y respaldos |
+
+Con un PostgreSQL existente, el instalador puede **crear la base y el usuario** si le das un superusuario (por ejemplo `postgres`), o usar unos que ya existan. Antes de continuar comprueba la conexión, la versión y que el usuario pueda crear tablas.
+
+> [!IMPORTANT]
+> **PostgreSQL en el mismo servidor.** SysPass corre en Docker y llega a tu PostgreSQL por la red interna de Docker (`host.docker.internal`), no por `localhost`. PostgreSQL debe aceptar esas conexiones:
+>
+> ```conf
+> # postgresql.conf
+> listen_addresses = 'localhost,172.17.0.1'
+>
+> # pg_hba.conf
+> host  all  all  172.16.0.0/12  scram-sha-256
+> ```
+>
+> Después: `sudo systemctl restart postgresql`. Si usas `ufw`: `sudo ufw allow from 172.16.0.0/12 to any port 5432 proto tcp`. Si la conexión falla, el instalador muestra estos mismos pasos.
+
 ### Instalación sin preguntas
 
 Todas las respuestas se pueden pasar como variables:
@@ -82,7 +108,16 @@ Todas las respuestas se pueden pasar como variables:
 curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.sh \
   | sudo SYSPASS_IMAGE=ghcr.io/jamesllm/syspass:latest \
          DOMAIN=vault.miempresa.com ACME_EMAIL=ti@miempresa.com \
-         OWNER_USER=admin OWNER_NAME="Equipo TI" bash
+         DB_MODE=builtin OWNER_USER=admin OWNER_NAME="Equipo TI" bash
+```
+
+Con un PostgreSQL existente:
+
+```bash
+curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.sh \
+  | sudo SYSPASS_IMAGE=ghcr.io/jamesllm/syspass:latest \
+         DB_MODE=external DB_HOST=localhost DB_NAME=syspass DB_USER=syspass \
+         DB_CREATE=s DB_ADMIN_USER=postgres DB_ADMIN_PASSWORD='…' bash
 ```
 
 | Variable | Descripción | Por defecto |
@@ -91,6 +126,12 @@ curl -fsSL https://github.com/Jamesllm/syspass/releases/latest/download/install.
 | `DOMAIN` | Dominio público; vacío = acceso por IP | vacío |
 | `ACME_EMAIL` | Correo para avisos del certificado | vacío |
 | `APP_PORT` | Puerto web cuando no hay dominio | `80` |
+| `DB_MODE` | `builtin` (incorporado) o `external` (existente) | pregunta |
+| `DB_HOST` / `DB_PORT` | Servidor PostgreSQL existente | `localhost` / `5432` |
+| `DB_NAME` / `DB_USER` | Base y usuario para SysPass | `syspass` |
+| `DB_PASSWORD` | Contraseña del usuario. Si el instalador lo crea, se genera sola | — |
+| `DB_CREATE` | `s` para crear la base y el usuario con un superusuario | pregunta |
+| `DB_ADMIN_USER` / `DB_ADMIN_PASSWORD` | Superusuario para crearlos (no se guarda) | `postgres` |
 | `OWNER_USER` / `OWNER_NAME` | Cuenta del dueño de la plataforma | `admin` |
 | `SYSPASS_DIR` | Carpeta de instalación | `/opt/syspass` |
 
@@ -125,7 +166,21 @@ El instalador deja el comando `syspass` disponible en el servidor:
 | `syspass upgrade` | Respaldo, nueva versión y migraciones automáticas |
 | `syspass admin <empresa> <usuario> "Nombre"` | Crea o restablece el administrador de una empresa |
 | `syspass owner <usuario> "Nombre"` | Crea o restablece un dueño de la plataforma |
-| `syspass uninstall [--purge]` | Detiene SysPass. Con `--purge` borra también los datos. |
+| `syspass uninstall` | Quita los contenedores y **conserva** datos, configuración y respaldos |
+| `syspass uninstall --purge` | Borra todo. Antes ofrece guardar un respaldo final |
+
+### Desinstalar
+
+```bash
+sudo syspass uninstall            # quita los contenedores; vuelve con: sudo syspass start
+sudo syspass uninstall --purge    # elimina SysPass por completo
+```
+
+Con `--purge` se eliminan los contenedores, las imágenes, la base incorporada, los certificados, `/opt/syspass` y el comando `syspass`. Antes ofrece guardar un **respaldo final con la configuración** (incluida `VAULT_KEY`) en `/root/syspass-respaldo-FECHA`, para poder restaurar en otra instalación. Pide escribir `DESINSTALAR` para confirmar; para hacerlo sin preguntas, agrega `--yes`.
+
+Si usas un **PostgreSQL existente**, la desinstalación no toca tu base. Al final muestra el SQL para borrarla si también quieres eliminarla.
+
+También se puede desinstalar con el mismo instalador: `sudo ./deploy/install.sh --uninstall --purge`.
 
 ### Respaldos
 
