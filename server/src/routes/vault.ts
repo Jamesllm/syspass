@@ -49,6 +49,7 @@ export async function vaultRoutes(app: FastifyInstance) {
          from groups g where g.org_id = $1 order by g.position, lower(g.name)`, [u.orgId]);
     const resources = await q<{ id: string }>(
       `select r.id, r.client_id as "clientId", r.group_id as "groupId", r.name, r.host, r.notes, r.updated_at as "updatedAt",
+              r.account_sort as "accountSort",
               case when $3 then coalesce(nullif(us.name, ''), us.username) end as "updatedBy"
          from resources r left join users us on us.id = r.updated_by
         where r.org_id = $1 and ($2::uuid[] is null or r.client_id = any($2))
@@ -150,6 +151,18 @@ export async function vaultRoutes(app: FastifyInstance) {
       await audit(req, 'resource.delete', { type: 'resource', id, summary: prev.name }, db);
     });
     return { ok: true };
+  });
+
+  /** Orden de las cuentas del recurso: se guarda en el servidor y lo ven todos igual */
+  app.put('/api/resources/:id/sort', async (req) => {
+    const u = requireUser(req);
+    requirePerm(u, 'resources.edit');
+    const { id } = Id.parse(req.params);
+    const { sort } = z.object({ sort: z.enum(['manual', 'name', 'name_desc', 'user', 'recent']) }).parse(req.body);
+    const res = await resourceClient(id, u.orgId);
+    await assertClientAccess(u, res.client_id);
+    await q('update resources set account_sort = $3 where id = $1 and org_id = $2', [id, u.orgId, sort]);
+    return { id, sort };
   });
 
   /* ── Cuentas una por una ── */

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Eye, EyeOff, Pencil, Plus } from 'lucide-react';
+import { ArrowUpDown, Download, Eye, EyeOff, Pencil, Plus } from 'lucide-react';
 import {
   Button, ChipGroup, CopyButton, EmptyState, HostTag, IconButton, PageHeader, PasswordText, SearchInput, SheetSelect,
   useToast, type Option,
@@ -8,15 +8,33 @@ import { useHotkey, useIsMobile } from '../hooks';
 import { api, errorText } from '../lib/api';
 import { copyToClipboard } from '../lib/clipboard';
 import { ago, fmtDate, norm, plural } from '../lib/format';
-import { accountIssues, can, type Account, type Client, type Group, type Resource, type User, type Vault } from '../lib/types';
+import {
+  ACCOUNT_SORTS, accountIssues, can, sortAccounts, type Account, type AccountSort, type Client, type Group, type Resource, type User, type Vault,
+} from '../lib/types';
 
-function haystack(r: Resource, client?: Client, group?: Group) {
-  return norm([client?.name, group?.name, r.name, r.host, r.notes, ...r.accounts.flatMap((a) => [a.role, a.username, a.notes])].join(' '));
+/**
+ * Busca en un recurso. Cada palabra puede coincidir con el recurso (cliente, grupo, nombre, IP, notas)
+ * o con una cuenta. Devuelve las cuentas que coinciden; `all` si el recurso coincide por sí solo.
+ */
+function searchResource(r: Resource, terms: string[], client?: Client, group?: Group): { all: true } | { ids: Set<string> } | null {
+  if (!terms.length) return { all: true };
+  const own = norm([client?.name, group?.name, r.name, r.host, r.notes].join(' '));
+  const pending = terms.filter((t) => !own.includes(t));
+  if (!pending.length) return { all: true };
+  const ids = new Set(
+    r.accounts
+      .filter((a) => {
+        const text = norm([a.role, a.username, a.notes].join(' '));
+        return pending.every((t) => text.includes(t));
+      })
+      .map((a) => a.id),
+  );
+  return ids.size ? { ids } : null;
 }
 
 export interface ExportScope { clientId?: string; groupId?: string }
 
-export function VaultView({ vault, user, counts, clientId, onSelectClient, onNewClient, onEdit, onEditClient, onEditAccount, onExport }: {
+export function VaultView({ vault, user, counts, clientId, onSelectClient, onNewClient, onEdit, onEditClient, onEditAccount, onAddAccounts, onExport }: {
   vault: Vault;
   user: User;
   counts: Map<string, number>;
@@ -26,6 +44,7 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
   onEdit: (r: Resource | null, groupId?: string) => void;
   onEditClient: (c: Client) => void;
   onEditAccount: (a: Account, r: Resource) => void;
+  onAddAccounts: (r: Resource) => void;
   onExport: (scope: ExportScope) => void;
 }) {
   const isMobile = useIsMobile();
@@ -43,7 +62,12 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
 
   const scoped = vault.resources.filter((r) => clientId === 'all' || r.clientId === clientId);
   const terms = norm(query).split(/\s+/).filter(Boolean);
-  const matched = scoped.filter((r) => !terms.length || terms.every((t) => haystack(r, clientsById.get(r.clientId), groupsById.get(r.groupId)).includes(t)));
+  const hits = new Map<string, Set<string> | null>();
+  const matched = scoped.filter((r) => {
+    const hit = searchResource(r, terms, clientsById.get(r.clientId), groupsById.get(r.groupId));
+    if (hit) hits.set(r.id, 'ids' in hit ? hit.ids : null);
+    return !!hit;
+  });
   const visible = matched.filter((r) => groupFilter === 'all' || r.groupId === groupFilter);
 
   const groupCounts = new Map<string, number>();
@@ -142,8 +166,8 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
             )}
             <div className="cards">
               {list.map((r) => (
-                <ResourceCard key={r.id} resource={r} group={groupsById.get(r.groupId)} user={user}
-                  onEdit={() => onEdit(r)} onEditAccount={(a) => onEditAccount(a, r)} />
+                <ResourceCard key={r.id} resource={r} group={groupsById.get(r.groupId)} user={user} only={hits.get(r.id) ?? null}
+                  onEdit={() => onEdit(r)} onEditAccount={(a) => onEditAccount(a, r)} onAddAccounts={() => onAddAccounts(r)} />
               ))}
             </div>
           </section>
@@ -159,9 +183,40 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
   );
 }
 
-function ResourceCard({ resource: r, group, user, onEdit, onEditAccount }: {
-  resource: Resource; group?: Group; user: User; onEdit: () => void; onEditAccount: (a: Account) => void;
+function ResourceCard({ resource: r, group, user, only, onEdit, onEditAccount, onAddAccounts }: {
+  resource: Resource; group?: Group; user: User;
+  /** Cuentas que coinciden con la búsqueda; null = todas */
+  only: Set<string> | null;
+  onEdit: () => void; onEditAccount: (a: Account) => void; onAddAccounts: () => void;
 }) {
+  const toast = useToast();
+  const canEdit = can(user, 'resources.edit');
+  const [sort, setSort] = useState<AccountSort>(r.accountSort ?? 'manual');
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => setSort(r.accountSort ?? 'manual'), [r.accountSort]);
+  // El Set se recrea en cada render del padre: se compara por contenido
+  const onlyKey = only ? [...only].join(',') : '';
+  useEffect(() => setShowAll(false), [onlyKey]);
+  const filtered = only && !showAll;
+  const accounts = useMemo(
+    () => sortAccounts(filtered ? r.accounts.filter((a) => only.has(a.id)) : r.accounts, sort),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [r.accounts, sort, onlyKey, filtered],
+  );
+  const hidden = r.accounts.length - accounts.length;
+
+  async function changeSort(next: AccountSort) {
+    const prev = sort;
+    setSort(next);
+    try {
+      await api(`/api/resources/${r.id}/sort`, { method: 'PUT', body: { sort: next } });
+      r.accountSort = next;
+    } catch (e) {
+      setSort(prev);
+      toast(errorText(e), 'err');
+    }
+  }
+
   return (
     <article className="card">
       <header className="card-head">
@@ -169,12 +224,34 @@ function ResourceCard({ resource: r, group, user, onEdit, onEditAccount }: {
           <h3>{r.name}</h3>
           <span className="type">{group?.name ?? 'Sin grupo'}</span>
         </div>
-        {can(user, 'resources.edit') && <IconButton icon={Pencil} label={`Editar ${r.name}`} onClick={onEdit} />}
+        <div className="card-actions">
+          {r.accounts.length > 1 && canEdit && (
+            <label className="sort-select" title="Orden de las cuentas (se guarda para todos)">
+              <ArrowUpDown size={14} strokeWidth={1.5} />
+              <span className="sr">Ordenar cuentas</span>
+              <select value={sort} onChange={(e) => changeSort(e.target.value as AccountSort)}>
+                {ACCOUNT_SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </label>
+          )}
+          {canEdit && <IconButton icon={Pencil} label={`Editar ${r.name}`} onClick={onEdit} />}
+        </div>
         {r.host && <div className="card-host"><HostTag host={r.host} color={group?.color ?? '#8a8a8a'} /></div>}
       </header>
       {r.notes && <p className="card-notes">{r.notes}</p>}
-      {r.accounts.length > 0 && (
-        <div className="accounts">{r.accounts.map((a) => <AccountRow key={a.id} account={a} user={user} onEdit={() => onEditAccount(a)} />)}</div>
+      {accounts.length > 0 && (
+        <div className="accounts">{accounts.map((a) => <AccountRow key={a.id} account={a} user={user} onEdit={() => onEditAccount(a)} />)}</div>
+      )}
+      {only && (hidden > 0 || showAll) && (
+        <div className="acc-filtered">
+          <span>{showAll ? `Todas las cuentas (${r.accounts.length})` : `${plural(accounts.length, 'cuenta coincide', 'cuentas coinciden')} · ${hidden} oculta${hidden === 1 ? '' : 's'}`}</span>
+          <button type="button" onClick={() => setShowAll((v) => !v)}>{showAll ? 'Solo las que coinciden' : 'Ver todas'}</button>
+        </div>
+      )}
+      {can(user, 'resources.create') && (
+        <button type="button" className="add-acc" onClick={onAddAccounts}>
+          <Plus size={16} strokeWidth={1.5} />Agregar cuenta
+        </button>
       )}
     </article>
   );

@@ -7,6 +7,7 @@ import { applyAccent, applyTitle } from './lib/brand';
 import { navigate, usePath } from './lib/router';
 import { accountIssues, can, type Account, type AppConfig, type AppMode, type Client, type Org, type Resource, type User, type Vault } from './lib/types';
 import { AccountModal } from './views/AccountModal';
+import { AddAccountsModal } from './views/AddAccountsModal';
 import { AuditView } from './views/AuditView';
 import { ExportModal } from './views/ExportModal';
 import { GroupsView } from './views/GroupsView';
@@ -103,6 +104,7 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
   const [newGroupId, setNewGroupId] = useState<string | undefined>();
   const [accountModal, setAccountModal] = useState<{ account: Account; resource: Resource } | null>(null);
   const [exportScope, setExportScope] = useState<ExportScope | null>(null);
+  const [addingTo, setAddingTo] = useState<Resource | null>(null);
   const [clientModal, setClientModal] = useState<Client | 'new' | null>(null);
   const [pwModal, setPwModal] = useState(false);
   const [sys, setSys] = useState<SystemInfo | null>(null);
@@ -177,6 +179,7 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
               onEdit={(r, groupId) => { setNewGroupId(groupId); setEditing(r ?? 'new'); }}
               onEditClient={setClientModal}
               onEditAccount={(account, resource) => setAccountModal({ account, resource })}
+              onAddAccounts={setAddingTo}
               onExport={setExportScope}
             />
           )}
@@ -225,6 +228,9 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
           onClose={() => setAccountModal(null)}
           onSaved={() => { setAccountModal(null); load(); }}
         />
+      )}
+      {addingTo && (
+        <AddAccountsModal key={addingTo.id} resource={addingTo} onClose={() => setAddingTo(null)} onSaved={() => { setAddingTo(null); load(); }} />
       )}
       {exportScope && vault && <ExportModal scope={exportScope} vault={vault} user={user} onClose={() => setExportScope(null)} />}
       {about && sys && (

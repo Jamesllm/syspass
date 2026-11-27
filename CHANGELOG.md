@@ -2,6 +2,16 @@
 
 Cada versión publicada toma sus notas de este archivo. La app las muestra en el modal de novedades.
 
+## 1.4.1 — 2026-11-27
+
+### Nuevo
+- Botón «Agregar cuenta» al pie de cada recurso: agrega una cuenta o varias en lista sin abrir el editor del recurso
+- Orden de las cuentas de cada recurso (nombre A→Z o Z→A, usuario o más recientes); se guarda en el servidor y lo ven todos
+- Orden natural de nombres: TC-LAP-2 va antes que TC-LAP-10
+
+### Arreglos
+- La búsqueda muestra solo las cuentas que coinciden dentro de cada recurso, con la opción «Ver todas»
+
 ## 1.4.0 — 2026-11-27
 
 ### Nuevo

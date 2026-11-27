@@ -1,7 +1,7 @@
 {
   "name": "syspass",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "SysPass · bóveda de credenciales multiempresa",
   "workspaces": [
     "server",

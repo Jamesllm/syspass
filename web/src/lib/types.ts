@@ -66,10 +66,34 @@ export interface Account {
   reusedCount: number;
 }
 
+/** Orden de las cuentas de un recurso (se guarda en el servidor) */
+export type AccountSort = 'manual' | 'name' | 'name_desc' | 'user' | 'recent';
+export const ACCOUNT_SORTS: { value: AccountSort; label: string }[] = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'name', label: 'Nombre A→Z' },
+  { value: 'name_desc', label: 'Nombre Z→A' },
+  { value: 'user', label: 'Usuario A→Z' },
+  { value: 'recent', label: 'Más recientes' },
+];
+
+/** Orden natural: TC-LAP-2 antes que TC-LAP-10 */
+const collator = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+export function sortAccounts(list: Account[], sort: AccountSort): Account[] {
+  if (sort === 'manual') return list;
+  const name = (a: Account) => a.role || a.username;
+  const out = [...list];
+  if (sort === 'name') out.sort((a, b) => collator.compare(name(a), name(b)));
+  if (sort === 'name_desc') out.sort((a, b) => collator.compare(name(b), name(a)));
+  if (sort === 'user') out.sort((a, b) => collator.compare(a.username || a.role, b.username || b.role));
+  if (sort === 'recent') out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return out;
+}
+
 export interface Resource {
   id: string;
   clientId: string;
   groupId: string;
+  accountSort: AccountSort;
   name: string;
   host: string;
   notes: string;
