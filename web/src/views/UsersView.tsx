@@ -6,12 +6,12 @@ import {
 } from '../components';
 import { useAction } from '../hooks';
 import { api, errorText } from '../lib/api';
-import { ago } from '../lib/format';
-import { ROLE_LABEL, type Client, type Role } from '../lib/types';
+import { ago, cx } from '../lib/format';
+import { PERMISSIONS, ROLE_DEFAULTS, ROLE_LABEL, type Client, type Permission, type Role } from '../lib/types';
 
 interface AdminUser {
   id: string; username: string; name: string; role: Role; active: boolean; mustChange: boolean;
-  lastLoginAt: string | null; clientIds: string[];
+  lastLoginAt: string | null; clientIds: string[]; permissions: Permission[];
 }
 
 const ROLE_OPTIONS = [
@@ -38,6 +38,10 @@ export function UsersView({ clients, meId }: { clients: Client[]; meId: string }
       render: (u) => (<><div>{u.name || u.username}</div><div className="muted mono small">{u.username}</div></>),
     },
     { key: 'role', header: 'Rol', render: (u) => ROLE_LABEL[u.role] },
+    {
+      key: 'perms', header: 'Permisos', className: 'sec',
+      render: (u) => (u.role === 'admin' ? 'Todos' : `${u.permissions.length} de ${PERMISSIONS.length}`),
+    },
     {
       key: 'clients', header: 'Clientes', className: 'sec',
       render: (u) => (u.role === 'admin' ? 'Todos'
@@ -99,6 +103,24 @@ function UserSheet({ user, clients, isMe, onClose, onSaved }: {
   const [active, setActive] = useState(user?.active ?? true);
   const [clientIds, setClientIds] = useState<Set<string>>(new Set(user?.clientIds ?? []));
   const [reset, setReset] = useState(false);
+  const [perms, setPerms] = useState<Set<Permission>>(
+    new Set(user ? user.permissions : ROLE_DEFAULTS.editor),
+  );
+
+  function changeRole(r: Role) {
+    setRole(r);
+    // Al cambiar de rol se marcan las casillas por defecto de ese rol
+    if (r !== 'admin') setPerms(new Set(ROLE_DEFAULTS[r]));
+  }
+
+  function togglePerm(p: Permission, on: boolean) {
+    const n = new Set(perms);
+    if (on) n.add(p); else n.delete(p);
+    // Exportar con contraseñas implica poder exportar
+    if (p === 'export.passwords' && on) n.add('export');
+    if (p === 'export' && !on) n.delete('export.passwords');
+    setPerms(n);
+  }
 
   function toggleClient(id: string, on: boolean) {
     const n = new Set(clientIds);
@@ -110,8 +132,8 @@ function UserSheet({ user, clients, isMe, onClose, onSaved }: {
     e.preventDefault();
     const ids = role === 'admin' ? [] : [...clientIds];
     const r = await run(() => (user
-      ? api<{ tempPassword: string | null }>(`/api/users/${user.id}`, { method: 'PUT', body: { name, role, active, clientIds: ids, resetPassword: reset } })
-      : api<{ tempPassword: string }>('/api/users', { body: { username, name, role, clientIds: ids } })));
+      ? api<{ tempPassword: string | null }>(`/api/users/${user.id}`, { method: 'PUT', body: { name, role, active, clientIds: ids, permissions: [...perms], resetPassword: reset } })
+      : api<{ tempPassword: string }>('/api/users', { body: { username, name, role, clientIds: ids, permissions: [...perms] } })));
     if (r) onSaved(user?.username ?? username, r.tempPassword);
   }
 
@@ -136,7 +158,7 @@ function UserSheet({ user, clients, isMe, onClose, onSaved }: {
           </Field>
         </FieldRow>
         <Field label="Rol">
-          <Select value={role} disabled={isMe} onChange={(e) => setRole(e.target.value as Role)} options={ROLE_OPTIONS} />
+          <Select value={role} disabled={isMe} onChange={(e) => changeRole(e.target.value as Role)} options={ROLE_OPTIONS} />
         </Field>
         {role !== 'admin' && (
           <div className="field">
@@ -150,6 +172,20 @@ function UserSheet({ user, clients, isMe, onClose, onSaved }: {
             )}
           </div>
         )}
+        {role !== 'admin' && (
+          <div className="field">
+            <span>Permisos</span>
+            <div className="perm-grid">
+              {PERMISSIONS.map((p) => (
+                <label key={p.key} className={cx('perm', perms.has(p.key) && 'on')}>
+                  <input type="checkbox" checked={perms.has(p.key)} onChange={(e) => togglePerm(p.key, e.target.checked)} />
+                  <span><strong>{p.label}</strong><small>{p.hint}</small></span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {role === 'admin' && <p className="sec">Un administrador tiene todos los permisos, ve todos los clientes y administra usuarios, auditoría y empresa</p>}
         {user && (
           <>
             <Checkbox label="Usuario activo" checked={active} disabled={isMe} onChange={(e) => setActive(e.target.checked)} />

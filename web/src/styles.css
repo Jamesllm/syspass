@@ -547,6 +547,71 @@ code.cmd { display: block; padding: 8px 12px; border-radius: 8px; background: va
 .older[open] summary { margin-bottom: 12px; }
 .older .release + .release { margin-top: 12px; }
 
+/* ── 1.4: pestañas, lista de cuentas, historial, grupos, permisos, exportar ── */
+.tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); }
+.tabs button {
+  height: 28px; padding: 0 12px; border-radius: 6px; border: 0; background: transparent;
+  font-size: 13px; color: var(--ink-2); transition: background-color 150ms var(--ease), color 150ms var(--ease);
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button.on { background: var(--card); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.modal > .tabs { justify-self: start; }
+.hint-box { padding: 16px; border-radius: 12px; border: 1px dashed var(--line-2); text-align: center; }
+.list-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.field .hint code, .list-actions code { font: 12px var(--mono); padding: 1px 4px; border-radius: 4px; background: var(--raised); }
+.textarea.mono { font: 13px/20px var(--mono); }
+.acc-pass .acc-edit-btn { margin-left: 4px; }
+
+/* Línea de tiempo vertical */
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; display: grid; gap: 0; }
+.tl-item { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; padding-bottom: 16px; }
+.tl-item::before { content: ''; position: absolute; left: 9px; top: 14px; bottom: -2px; width: 2px; background: var(--line-2); }
+.tl-item:last-child::before { display: none; }
+.tl-dot { width: 12px; height: 12px; margin: 4px 0 0 4px; border-radius: 50%; background: var(--ink-3); box-shadow: 0 0 0 3px var(--bg); position: relative; }
+.tl-item.create .tl-dot { background: var(--accent); }
+.tl-item.password .tl-dot { background: var(--warn); }
+.tl-item.delete .tl-dot { background: var(--neg); }
+.tl-item.view .tl-dot { width: 8px; height: 8px; margin: 6px 0 0 6px; background: var(--line-2); }
+.tl-body { display: grid; gap: 2px; min-width: 0; }
+.tl-body p { color: var(--ink-2); }
+.tl-body strong { color: var(--ink); font-weight: 500; }
+.tl-item.view .tl-body p { font-size: 13px; color: var(--ink-3); }
+.tl-detail { font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.tl-time { font: 12px var(--mono); color: var(--ink-3); }
+.small-check { min-height: 28px; font-size: 13px; color: var(--ink-2); }
+
+/* Grupos */
+.group-list { list-style: none; margin: 0; padding: 0; }
+.group-list li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; min-height: 52px; padding: 4px 8px 4px 20px; border-top: 1px solid var(--line); }
+.group-list li:first-child { border-top: 0; }
+.group-list .name { font-weight: 500; }
+.led-lg { width: 10px; height: 10px; border-radius: 50%; }
+.swatch.small { width: 28px; height: 28px; border-radius: 50%; }
+
+/* Permisos */
+.perm-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.perm {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line-2); background: var(--card); transition: border-color 150ms var(--ease), background-color 150ms var(--ease);
+}
+.perm.on { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.perm input { accent-color: var(--accent); width: 16px; height: 16px; margin: 2px 0 0; flex: none; }
+.perm span { display: grid; gap: 1px; }
+.perm strong { font-weight: 500; font-size: 13px; }
+.perm small { font-size: 12px; color: var(--ink-3); }
+
+/* Exportar */
+.radio-list { display: grid; gap: 8px; }
+.radio-card {
+  display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--line-2); background: var(--card); transition: border-color 150ms var(--ease);
+}
+.radio-card strong { font-weight: 500; }
+.radio-card.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pw-export { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); }
+.pw-export.on { border-color: color-mix(in srgb, var(--warn) 50%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.pw-export .small { color: var(--ink-2); }
+
 /* ── Pantallas medianas ─────────────────────────────── */
 @media (max-width: 1100px) {
   .acc { grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1.2fr); grid-template-areas: 'role user pass' '. meta meta' '. notes notes'; }
@@ -629,7 +694,7 @@ code.cmd { display: block; padding: 8px 12px; border-radius: 8px; background: va
   }
   .acc-role { font-size: 12px; line-height: 16px; }
   .acc-meta { flex-direction: row; gap: 8px; padding: 0 12px 0 0; }
-  .acc-meta .muted { display: none; }
+  .acc-meta { flex-wrap: wrap; }
   .acc-user, .acc-pass { min-height: 40px; }
   .acc .val { flex: 1; font-size: 15px; }
   .pw { font-size: 14px; line-height: 40px; }
@@ -669,7 +734,7 @@ code.cmd { display: block; padding: 8px 12px; border-radius: 8px; background: va
   .sheet-head { padding: 8px 8px 8px 16px; }
   .sheet-body { padding: 16px; }
   .sheet-foot { padding: 12px 16px calc(12px + var(--safe-b)); }
-  .field-row, .client-pick { grid-template-columns: minmax(0, 1fr); }
+  .field-row, .client-pick, .perm-grid { grid-template-columns: minmax(0, 1fr); }
   .acc-edit { padding: 8px 12px 16px; }
 
   /* Diálogos: hoja inferior */

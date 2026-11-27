@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { DUMMY_HASH, hashPassword, newToken, sha256, verifyPassword } from '../crypto.js';
 import { q, tx, type Db } from '../db.js';
 import { Slug, createOrg, isReserved, orgBrand, singleOrg } from '../orgs.js';
+import { effectivePermissions } from '../permissions.js';
 
 const Password = z.string().min(12, 'La contraseña debe tener al menos 12 caracteres').max(200);
 const Username = z.string().trim().min(3, 'El usuario debe tener al menos 3 caracteres').max(60)
@@ -96,7 +97,7 @@ export async function sessionRoutes(app: FastifyInstance) {
     const u = requireUser(req, { allowMustChange: true });
     const org = await orgBrand(u.orgId);
     return {
-      user: { id: u.id, username: u.username, name: u.name, role: u.role, mustChange: u.mustChange },
+      user: { id: u.id, username: u.username, name: u.name, role: u.role, mustChange: u.mustChange, permissions: effectivePermissions(u.role, u.permissions) },
       org,
       mode: config.mode,
       idleMinutes: config.idleMinutes,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { newWrappedOrgKey } from './crypto.js';
 import { q, type Db } from './db.js';
+import { seedGroups } from './vault.js';
 
 /** Códigos que no puede usar una empresa */
 const RESERVED = new Set(['syspass', 'admin', 'api', 'www', 'app', 'registro', 'login', 'soporte', 'support', 'root', 'system', 'platform']);
@@ -27,6 +28,7 @@ export async function createOrg(db: Db, input: { slug: string; name: string; isP
     'insert into orgs (id, slug, name, is_platform, dek_enc) values ($1, $2, $3, $4, $5)',
     [id, input.slug, input.name, input.isPlatform ?? false, newWrappedOrgKey(id)], db,
   );
+  await seedGroups(db, id);
   return id;
 }
 

@@ -2,6 +2,18 @@
 
 Cada versión publicada toma sus notas de este archivo. La app las muestra en el modal de novedades.
 
+## 1.4.0 — 2026-11-27
+
+### Nuevo
+- Grupos editables (VPN, NAS, AnyDesk…): crea, renombra o borra grupos con su color; los tipos anteriores pasan a ser grupos
+- Al crear un recurso se elige primero el grupo y luego se agregan las cuentas
+- Agregar cuentas en lista: una por línea con el formato usuario;contraseña (también se puede pegar desde Excel)
+- Editar cada cuenta por separado con el lápiz de la cuenta
+- Exportar a Excel lo que estás viendo (cliente o grupo) o todo; con contraseñas solo con permiso y queda en la auditoría
+- Permisos por usuario con casillas: ver, copiar, crear, editar, eliminar, grupos, exportar, importar e historial
+- Historial de cada cuenta en una línea de tiempo: quién la creó, cambió la contraseña o el usuario, y quién la vio o copió
+- Cada cuenta muestra su fecha de modificación; los administradores ven también quién la modificó
+
 ## 1.3.0 — 2026-11-26
 
 ### Nuevo

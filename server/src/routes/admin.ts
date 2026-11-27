@@ -1,25 +1,33 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit } from '../audit.js';
-import { HttpError, requireAdmin } from '../auth.js';
+import { HttpError, allowedClients, requireAdmin, requireUser } from '../auth.js';
 import { hashPassword, tempPassword } from '../crypto.js';
 import { q, tx, type Db } from '../db.js';
 import { parseCredentialsTxt } from '../importTxt.js';
-import { findOrCreateClient, saveResource } from '../vault.js';
+import { PERMISSIONS, ROLE_DEFAULTS, requirePerm } from '../permissions.js';
+import { findOrCreateClient, groupForType, saveResource } from '../vault.js';
 
 const Id = z.object({ id: z.uuid() });
 const Role = z.enum(['admin', 'editor', 'lector']);
+const Permissions = z.array(z.enum(PERMISSIONS)).max(PERMISSIONS.length);
+/** Permisos guardados: los admin no necesitan (tienen todos); si no se envían, los del rol */
+const storedPermissions = (role: 'admin' | 'editor' | 'lector', p?: string[]) =>
+  role === 'admin' ? [] : [...new Set(p ?? ROLE_DEFAULTS[role])];
+
 const UserCreate = z.object({
   username: z.string().trim().min(3, 'Mínimo 3 caracteres').max(60).regex(/^[a-zA-Z0-9._@-]+$/, 'Solo letras, números y . _ @ -'),
   name: z.string().trim().max(120).default(''),
   role: Role,
   clientIds: z.array(z.uuid()).default([]),
+  permissions: Permissions.optional(),
 });
 const UserUpdate = z.object({
   name: z.string().trim().max(120),
   role: Role,
   active: z.boolean(),
   clientIds: z.array(z.uuid()).default([]),
+  permissions: Permissions.optional(),
   resetPassword: z.boolean().default(false),
 });
 const ImportBody = z.object({ text: z.string().min(1).max(500_000) });
@@ -43,7 +51,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/users', async (req) => {
     const me = requireAdmin(req);
     return q(
-      `select u.id, u.username, u.name, u.role, u.active, u.must_change as "mustChange", u.last_login_at as "lastLoginAt",
+      `select u.id, u.username, u.name, u.role, u.active, u.must_change as "mustChange", u.last_login_at as "lastLoginAt", u.permissions,
               coalesce(array_agg(uc.client_id) filter (where uc.client_id is not null), '{}') as "clientIds"
          from users u left join user_clients uc on uc.user_id = u.id
         where u.org_id = $1
@@ -58,8 +66,8 @@ export async function adminRoutes(app: FastifyInstance) {
     try {
       const id = await tx(async (db) => {
         const [u] = await q<{ id: string }>(
-          'insert into users (org_id, username, name, role, pass_hash, must_change) values ($1, $2, $3, $4, $5, true) returning id',
-          [me.orgId, input.username, input.name, input.role, hash], db);
+          'insert into users (org_id, username, name, role, pass_hash, must_change, permissions) values ($1, $2, $3, $4, $5, true, $6) returning id',
+          [me.orgId, input.username, input.name, input.role, hash, storedPermissions(input.role, input.permissions)], db);
         await setUserClients(db, me.orgId, u.id, input.clientIds);
         await audit(req, 'user.create', { type: 'user', id: u.id, summary: `${input.username} · ${input.role}` }, db);
         return u.id;
@@ -83,8 +91,9 @@ export async function adminRoutes(app: FastifyInstance) {
     await tx(async (db) => {
       const rows = await q<{ username: string }>(
         `update users set name = $3, role = $4, active = $5,
-                pass_hash = coalesce($6, pass_hash), must_change = must_change or $6 is not null
-          where id = $1 and org_id = $2 returning username`, [id, me.orgId, input.name, input.role, input.active, hash], db);
+                pass_hash = coalesce($6, pass_hash), must_change = must_change or $6 is not null, permissions = $7
+          where id = $1 and org_id = $2 returning username`,
+        [id, me.orgId, input.name, input.role, input.active, hash, storedPermissions(input.role, input.permissions)], db);
       if (!rows.length) throw new HttpError(404, 'Usuario no encontrado');
       await setUserClients(db, me.orgId, id, input.role === 'admin' ? [] : input.clientIds);
       if (temp || !input.active) await q('delete from sessions where user_id = $1', [id], db);
@@ -109,7 +118,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   /** Vista previa: no guarda nada y no devuelve contraseñas. */
   app.post('/api/import/txt/preview', async (req) => {
-    requireAdmin(req);
+    requirePerm(requireUser(req), 'import');
     const { text } = ImportBody.parse(req.body);
     return {
       resources: parseCredentialsTxt(text).map((r) => ({
@@ -120,16 +129,27 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/import/txt/commit', async (req) => {
-    const me = requireAdmin(req);
+    const me = requireUser(req);
+    requirePerm(me, 'import');
     const { text } = ImportBody.parse(req.body);
     const parsed = parseCredentialsTxt(text);
+    const allowed = await allowedClients(me);
     return tx(async (db) => {
       let accounts = 0;
       const clients = new Set<string>();
       for (const r of parsed) {
-        const clientId = await findOrCreateClient(db, me.orgId, r.client);
+        let clientId: string;
+        if (allowed) {
+          // Sin ser admin no se crean clientes: solo se importa en los que tiene asignados
+          const [c] = await q<{ id: string }>('select id from clients where org_id = $1 and lower(name) = lower($2)', [me.orgId, r.client], db);
+          if (!c || !allowed.has(c.id)) throw new HttpError(403, `No tienes acceso al cliente "${r.client}". Pide a un administrador que lo cree o te lo asigne`);
+          clientId = c.id;
+        } else {
+          clientId = await findOrCreateClient(db, me.orgId, r.client);
+        }
         clients.add(clientId);
-        await saveResource(db, me, { clientId, type: r.type, name: r.name, host: r.host, notes: r.notes, accounts: r.accounts });
+        const groupId = await groupForType(db, me.orgId, r.type);
+        await saveResource(db, me, { clientId, groupId, name: r.name, host: r.host, notes: r.notes, accounts: r.accounts });
         accounts += r.accounts.length;
       }
       await audit(req, 'import.txt', { summary: `${clients.size} cliente(s), ${parsed.length} recurso(s), ${accounts} cuenta(s)` }, db);

@@ -133,3 +133,16 @@ export function ChipGroup({ label, value, options, onChange }: { label: string; 
     </div>
   );
 }
+
+/** Pestañas segmentadas (p. ej. "Una por una" / "En lista") */
+export function Tabs({ label, value, options, onChange }: { label: string; value: string; options: Option[]; onChange: (v: string) => void }) {
+  return (
+    <div className="tabs" role="tablist" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" role="tab" aria-selected={value === o.value} className={cx(value === o.value && 'on')} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}

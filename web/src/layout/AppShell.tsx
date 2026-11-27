@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Building2, FileUp, Globe, KeyRound, Layers, LogOut, Menu, Palette, Plus, ScrollText, ShieldCheck, Users } from 'lucide-react';
+import { Building2, FileUp, FolderTree, Globe, KeyRound, Layers, LogOut, Menu, Palette, Plus, ScrollText, ShieldCheck, Users } from 'lucide-react';
 import { BottomSheet, ICON, OrgBrand, ThemeToggle } from '../components';
 import { useIsMobile } from '../hooks';
 import { cx } from '../lib/format';
-import { ROLE_LABEL, type AppMode, type Client, type Org, type User } from '../lib/types';
+import { ROLE_LABEL, can, type AppMode, type Client, type Org, type User } from '../lib/types';
 
 export type View =
   | { kind: 'vault'; clientId: string | 'all' }
@@ -12,6 +12,7 @@ export type View =
   | { kind: 'users' }
   | { kind: 'audit' }
   | { kind: 'import' }
+  | { kind: 'groups' }
   | { kind: 'settings' }
   | { kind: 'platform' };
 
@@ -76,13 +77,17 @@ export function AppShell({ user, org, mode, version, updateAvailable, onOpenAbou
   // El panel de empresas solo existe en modo multiempresa
   const isPlatform = org.isPlatform && mode === 'multi';
 
-  const adminItems: NavItemProps[] = isAdmin ? [
-    { icon: Users, label: 'Usuarios', active: is('users'), onClick: () => onNavigate({ kind: 'users' }) },
-    { icon: ScrollText, label: 'Auditoría', active: is('audit'), onClick: () => onNavigate({ kind: 'audit' }) },
-    { icon: FileUp, label: 'Importar', active: is('import'), onClick: () => onNavigate({ kind: 'import' }) },
-    { icon: Palette, label: 'Empresa', active: is('settings'), onClick: () => onNavigate({ kind: 'settings' }) },
+  // Cada opción aparece según los permisos del usuario
+  const adminItems: NavItemProps[] = [
+    ...(can(user, 'groups.manage') ? [{ icon: FolderTree, label: 'Grupos', active: is('groups'), onClick: () => onNavigate({ kind: 'groups' }) }] : []),
+    ...(isAdmin ? [
+      { icon: Users, label: 'Usuarios', active: is('users'), onClick: () => onNavigate({ kind: 'users' }) },
+      { icon: ScrollText, label: 'Auditoría', active: is('audit'), onClick: () => onNavigate({ kind: 'audit' }) },
+    ] : []),
+    ...(can(user, 'import') ? [{ icon: FileUp, label: 'Importar', active: is('import'), onClick: () => onNavigate({ kind: 'import' }) }] : []),
+    ...(isAdmin ? [{ icon: Palette, label: 'Empresa', active: is('settings'), onClick: () => onNavigate({ kind: 'settings' }) }] : []),
     ...(isPlatform ? [{ icon: Globe, label: 'Empresas', active: is('platform'), onClick: () => onNavigate({ kind: 'platform' }) }] : []),
-  ] : [];
+  ];
   const accountItems: NavItemProps[] = [
     { icon: KeyRound, label: 'Cambiar contraseña', onClick: onChangePassword },
     { icon: LogOut, label: 'Salir', onClick: onLogout },
@@ -106,7 +111,7 @@ export function AppShell({ user, org, mode, version, updateAvailable, onOpenAbou
   );
 
   if (isMobile) {
-    const inMore = is('users') || is('audit') || is('import') || is('settings') || is('platform');
+    const inMore = is('users') || is('audit') || is('import') || is('groups') || is('settings') || is('platform');
     const close = (fn: () => void) => () => { setMoreOpen(false); fn(); };
     return (
       <div className="shell mobile">
@@ -123,7 +128,7 @@ export function AppShell({ user, org, mode, version, updateAvailable, onOpenAbou
             {adminItems.length > 0 && (
               <div className="nav">
                 {adminItems.map((i) => <NavItem key={i.label} {...i} onClick={close(i.onClick)} />)}
-                <NavItem icon={Plus} label="Nuevo cliente" onClick={close(onNewClient)} />
+                {isAdmin && <NavItem icon={Plus} label="Nuevo cliente" onClick={close(onNewClient)} />}
               </div>
             )}
             <div className="nav sep">

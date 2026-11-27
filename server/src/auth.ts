@@ -14,6 +14,8 @@ export interface SessionUser {
   orgId: string;
   /** Empresa dueña de la plataforma: ve el panel de Empresas */
   isPlatform: boolean;
+  /** Casillas de permisos (los admin tienen todos) */
+  permissions: string[];
 }
 
 declare module 'fastify' {
@@ -56,9 +58,9 @@ export function registerAuth(app: FastifyInstance) {
     const id = sha256(token);
     const rows = await q<{
       user_id: string; username: string; name: string; role: Role; must_change: boolean; active: boolean;
-      org_id: string; is_platform: boolean; org_status: string; stale: boolean;
+      org_id: string; is_platform: boolean; org_status: string; stale: boolean; permissions: string[];
     }>(
-      `select s.user_id, u.username, u.name, u.role, u.must_change, u.active,
+      `select s.user_id, u.username, u.name, u.role, u.must_change, u.active, u.permissions,
               u.org_id, o.is_platform, o.status as org_status,
               s.last_seen < now() - interval '1 minute' as stale
          from sessions s
@@ -73,7 +75,7 @@ export function registerAuth(app: FastifyInstance) {
     if (r.stale) await q('update sessions set last_seen = now() where id = $1', [id]);
     req.user = {
       id: r.user_id, username: r.username, name: r.name, role: r.role, mustChange: r.must_change,
-      sessionId: id, orgId: r.org_id, isPlatform: r.is_platform,
+      sessionId: id, orgId: r.org_id, isPlatform: r.is_platform, permissions: r.permissions ?? [],
     };
   });
 }
@@ -105,9 +107,8 @@ export async function allowedClients(u: SessionUser): Promise<Set<string> | null
   return new Set(rows.map((r) => r.client_id));
 }
 
-/** El cliente existe en la empresa del usuario y este puede verlo (o editarlo). */
-export async function assertClientAccess(u: SessionUser, clientId: string, write: boolean) {
-  if (write && u.role === 'lector') throw new HttpError(403, 'Tu rol es de solo lectura');
+/** El cliente existe en la empresa del usuario y este lo tiene asignado. Lo que puede hacer lo deciden sus permisos. */
+export async function assertClientAccess(u: SessionUser, clientId: string) {
   const [c] = await q('select 1 from clients where id = $1 and org_id = $2', [clientId, u.orgId]);
   if (!c) throw new HttpError(404, 'No encontrado');
   const allowed = await allowedClients(u);

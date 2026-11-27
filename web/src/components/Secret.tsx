@@ -1,15 +1,14 @@
 import { ExternalLink } from 'lucide-react';
 import { charKind } from '../lib/password';
-import { typeInfo, type ResourceType } from '../lib/types';
 import { CopyButton } from './Button';
 
-/** Etiqueta de rack con LED: la firma de la app para IP, URL o ID. */
-export function HostTag({ host, type }: { host: string; type: ResourceType }) {
+/** Etiqueta de rack con LED (color del grupo): la firma de la app para IP, URL o ID. */
+export function HostTag({ host, color }: { host: string; color: string }) {
   if (!host) return null;
   const isUrl = /^https?:\/\//i.test(host);
   return (
     <span className="host" title={host}>
-      <span className="led" style={{ background: typeInfo(type).led }} />
+      <span className="led" style={{ background: color }} />
       <span className="txt">{isUrl ? host.replace(/^https?:\/\//i, '').replace(/\/$/, '') : host}</span>
       <CopyButton value={host} label="Copiar host" done="Host copiado" />
       {isUrl && (

@@ -5,8 +5,11 @@ import { AppShell, type View } from './layout/AppShell';
 import { api, errorText, setUnauthorizedHandler } from './lib/api';
 import { applyAccent, applyTitle } from './lib/brand';
 import { navigate, usePath } from './lib/router';
-import { accountIssues, type AppConfig, type AppMode, type Client, type Org, type Resource, type User, type Vault } from './lib/types';
+import { accountIssues, can, type Account, type AppConfig, type AppMode, type Client, type Org, type Resource, type User, type Vault } from './lib/types';
+import { AccountModal } from './views/AccountModal';
 import { AuditView } from './views/AuditView';
+import { ExportModal } from './views/ExportModal';
+import { GroupsView } from './views/GroupsView';
 import { ChangePasswordModal, ForcedPasswordChange, Login, Register } from './views/Auth';
 import { ClientModal } from './views/ClientModal';
 import { ImportView } from './views/ImportView';
@@ -16,7 +19,7 @@ import { ResourceSheet } from './views/ResourceSheet';
 import { ReviewView } from './views/ReviewView';
 import { UpdatesModal, type SystemInfo, type UpdatesInfo } from './views/UpdatesModal';
 import { UsersView } from './views/UsersView';
-import { VaultView } from './views/VaultView';
+import { VaultView, type ExportScope } from './views/VaultView';
 
 /** Última versión cuyas novedades ya vio este navegador */
 const SEEN_KEY = 'sp_seen_version';
@@ -97,6 +100,9 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
   const [vault, setVault] = useState<Vault | null>(null);
   const [view, setView] = useState<View>({ kind: 'vault', clientId: 'all' });
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
+  const [newGroupId, setNewGroupId] = useState<string | undefined>();
+  const [accountModal, setAccountModal] = useState<{ account: Account; resource: Resource } | null>(null);
+  const [exportScope, setExportScope] = useState<ExportScope | null>(null);
   const [clientModal, setClientModal] = useState<Client | 'new' | null>(null);
   const [pwModal, setPwModal] = useState(false);
   const [sys, setSys] = useState<SystemInfo | null>(null);
@@ -168,14 +174,17 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
               clientId={view.clientId}
               onSelectClient={(id) => go({ kind: 'vault', clientId: id })}
               onNewClient={() => setClientModal('new')}
-              onEdit={(r) => setEditing(r ?? 'new')}
+              onEdit={(r, groupId) => { setNewGroupId(groupId); setEditing(r ?? 'new'); }}
               onEditClient={setClientModal}
+              onEditAccount={(account, resource) => setAccountModal({ account, resource })}
+              onExport={setExportScope}
             />
           )}
           {view.kind === 'review' && <ReviewView vault={vault} user={user} onEdit={setEditing} />}
           {view.kind === 'users' && isAdmin && <UsersView clients={vault.clients} meId={user.id} />}
           {view.kind === 'audit' && isAdmin && <AuditView />}
-          {view.kind === 'import' && isAdmin && <ImportView onImported={load} />}
+          {view.kind === 'import' && can(user, 'import') && <ImportView onImported={load} />}
+          {view.kind === 'groups' && can(user, 'groups.manage') && <GroupsView vault={vault} onChanged={load} />}
           {view.kind === 'settings' && isAdmin && <OrgSettingsView org={org} mode={mode} onSaved={onOrgChange} />}
           {view.kind === 'platform' && isAdmin && org.isPlatform && mode === 'multi' && <OrgsView />}
         </>
@@ -186,7 +195,10 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
           key={editing === 'new' ? 'new' : editing.id}
           resource={editing === 'new' ? null : editing}
           clients={vault.clients}
+          groups={vault.groups}
           defaultClientId={currentClientId}
+          defaultGroupId={newGroupId}
+          user={user}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
         />
@@ -204,6 +216,17 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
         />
       )}
       {pwModal && <ChangePasswordModal onClose={() => setPwModal(false)} />}
+      {accountModal && (
+        <AccountModal
+          key={accountModal.account.id}
+          account={accountModal.account}
+          resource={accountModal.resource}
+          user={user}
+          onClose={() => setAccountModal(null)}
+          onSaved={() => { setAccountModal(null); load(); }}
+        />
+      )}
+      {exportScope && vault && <ExportModal scope={exportScope} vault={vault} user={user} onClose={() => setExportScope(null)} />}
       {about && sys && (
         <UpdatesModal
           info={sys}

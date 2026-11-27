@@ -1,9 +1,10 @@
 import { Button, PageHeader, Panel, Stat, StatGrid } from '../components';
 import { ago, plural } from '../lib/format';
-import { accountIssues, typeInfo, type Resource, type User, type Vault } from '../lib/types';
+import { accountIssues, can, type Resource, type User, type Vault } from '../lib/types';
 
 export function ReviewView({ vault, user, onEdit }: { vault: Vault; user: User; onEdit: (r: Resource) => void }) {
   const clients = new Map(vault.clients.map((c) => [c.id, c]));
+  const groups = new Map(vault.groups.map((g) => [g.id, g]));
   const rows = vault.resources.flatMap((r) => r.accounts.filter((a) => a.hasPassword).map((a) => ({ r, a, i: accountIssues(a) })));
   const flagged = rows.filter((x) => x.i.any).sort((x, y) => Number(y.i.weak) - Number(x.i.weak) || y.a.reusedCount - x.a.reusedCount);
   const total = rows.length;
@@ -36,14 +37,14 @@ export function ReviewView({ vault, user, onEdit }: { vault: Vault; user: User; 
                 <li className="issue" key={a.id}>
                   <div className="what">
                     <strong>{r.name} · {a.username || a.role || 'Sin usuario'}</strong>
-                    <span>{clients.get(r.clientId)?.name} · {typeInfo(r.type).label}</span>
+                    <span>{clients.get(r.clientId)?.name} · {groups.get(r.groupId)?.name}</span>
                   </div>
                   <div className="tags">
                     {i.weak && <span className="flag neg">Débil</span>}
                     {i.reused && <span className="flag">Repetida ×{a.reusedCount}</span>}
                     {i.stale && <span className="flag">{ago(a.passwordChangedAt)}</span>}
                   </div>
-                  {user.role !== 'lector' && <Button size="sm" onClick={() => onEdit(r)}>Cambiar</Button>}
+                  {can(user, 'resources.edit') && <Button size="sm" onClick={() => onEdit(r)}>Cambiar</Button>}
                 </li>
               ))}
             </ul>

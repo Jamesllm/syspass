@@ -14,6 +14,7 @@ import { pool } from './db.js';
 import { adminRoutes } from './routes/admin.js';
 import { orgRoutes } from './routes/org.js';
 import { systemRoutes } from './routes/system.js';
+import { exportRoutes } from './routes/export.js';
 import { sessionRoutes } from './routes/session.js';
 import { vaultRoutes } from './routes/vault.js';
 
@@ -74,6 +75,7 @@ await app.register(vaultRoutes);
 await app.register(adminRoutes);
 await app.register(orgRoutes);
 await app.register(systemRoutes);
+await app.register(exportRoutes);
 
 // Si existe el build del frontend, este mismo servidor lo sirve (opcional).
 const serverRoot = resolve(dirname(fileURLToPath(import.meta.url)), import.meta.url.includes('/dist/') ? '../..' : '..');

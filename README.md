@@ -23,8 +23,10 @@ Guarda los accesos de cada cliente —servidores, NAS, VPN, correos, plataformas
 |---|---|
 | **Una empresa o multiempresa** | Para tu propia empresa, el equipo entra solo con usuario y contraseña. Como SaaS, cada empresa se registra en `/registro` y entra con su código, con datos, usuarios y llave de cifrado aislados. |
 | **Marca propia** | Cada empresa usa su nombre, su logo y su color. El color se ajusta solo para mantener buen contraste en modo claro y oscuro. |
-| **Clientes y recursos** | Organiza los accesos por cliente y tipo (servidor, NAS, VPN, hipervisor, correo, plataforma web…), con varias cuentas por recurso. |
-| **Permisos** | Roles *administrador*, *editor* y *solo lectura*, con asignación de clientes por usuario. |
+| **Clientes, grupos y recursos** | Organiza los accesos por cliente y por grupo editable (VPN, NAS, AnyDesk, correo…), con varias cuentas por recurso. Las cuentas se agregan una por una o en lista (`usuario;contraseña`). |
+| **Permisos** | Casillas por usuario: ver, copiar, crear, editar, eliminar, administrar grupos, exportar, exportar con contraseñas, importar y ver historial. El rol solo marca las casillas por defecto; además se asignan los clientes de cada usuario. |
+| **Historial** | Línea de tiempo por cuenta: quién la creó, cambió la contraseña o el usuario, y quién la vio o copió. Todos ven la fecha de modificación; quién la modificó, solo los administradores. |
+| **Exportar a Excel** | Lo que estás viendo (cliente o grupo) o todo. Sin contraseñas por defecto; con contraseñas solo con permiso y queda en la auditoría. |
 | **Auditoría** | Queda registrado cada inicio de sesión, cada contraseña vista o copiada y cada cambio, con usuario, fecha e IP. |
 | **Revisión de seguridad** | Detecta contraseñas débiles, repetidas o sin cambiar en más de 180 días. |
 | **Importación** | Convierte un archivo de texto con credenciales en clientes, recursos y cuentas cifradas, con vista previa. |
