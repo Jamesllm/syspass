@@ -40,6 +40,8 @@ export interface Client {
   id: string;
   name: string;
   notes: string;
+  /** Color para distinguirlo en el menú y en las tarjetas; null = sin color */
+  color: string | null;
 }
 
 export interface Group {

@@ -2,6 +2,13 @@
 
 Cada versión publicada toma sus notas de este archivo. La app las muestra en el modal de novedades.
 
+## 1.4.2 — 2026-11-27
+
+### Nuevo
+- Color para cada cliente: se elige al crear o editar el cliente
+- Sus recursos llevan el borde y la cabecera de ese color, y el botón del cliente en el menú se pinta de su color cuando está abierto
+- El texto se ajusta solo (blanco u oscuro) para leerse bien sobre cualquier color
+
 ## 1.4.1 — 2026-11-27
 
 ### Nuevo

@@ -28,6 +28,16 @@ export function contrast(a: string, b: string) {
   return (l1 + 0.05) / (l2 + 0.05);
 }
 
+/** Texto sobre un fondo de ese color: blanco mientras se lea bien (3:1), si no casi negro */
+export function inkOn(hex: string) {
+  return contrast('#ffffff', hex) >= 3 ? '#ffffff' : '#171717';
+}
+
+/** Variables CSS para pintar algo con el color de un cliente (fondo y texto legible) */
+export function clientVars(hex: string | null | undefined): Record<string, string> | undefined {
+  return hex ? { '--client': hex, '--client-ink': inkOn(hex) } : undefined;
+}
+
 /** Acerca el color a `toward` (negro o blanco) lo justo para llegar a 4.5:1 sobre `surface`. */
 function ensureContrast(hex: string, surface: string, toward: RGB) {
   const base = toRgb(hex);

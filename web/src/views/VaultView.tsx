@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ArrowUpDown, Download, Eye, EyeOff, Pencil, Plus } from 'lucide-react';
 import {
   Button, ChipGroup, CopyButton, EmptyState, HostTag, IconButton, PageHeader, PasswordText, SearchInput, SheetSelect,
@@ -6,8 +6,9 @@ import {
 } from '../components';
 import { useHotkey, useIsMobile } from '../hooks';
 import { api, errorText } from '../lib/api';
+import { clientVars } from '../lib/brand';
 import { copyToClipboard } from '../lib/clipboard';
-import { ago, fmtDate, norm, plural } from '../lib/format';
+import { ago, cx, fmtDate, norm, plural } from '../lib/format';
 import {
   ACCOUNT_SORTS, accountIssues, can, sortAccounts, type Account, type AccountSort, type Client, type Group, type Resource, type User, type Vault,
 } from '../lib/types';
@@ -79,7 +80,7 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
 
   const clientOptions: Option[] = [
     { value: 'all', label: 'Todos los clientes', meta: vault.resources.length },
-    ...vault.clients.map((c) => ({ value: c.id, label: c.name, meta: counts.get(c.id) ?? 0 })),
+    ...vault.clients.map((c) => ({ value: c.id, label: c.name, meta: counts.get(c.id) ?? 0, icon: <ClientDot color={c.color} /> })),
   ];
 
   const sections = useMemo(() => {
@@ -106,7 +107,7 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
             options={clientOptions}
             onChange={onSelectClient}
             className="title-select"
-            trigger={() => <h1>{title}</h1>}
+            trigger={() => <h1>{client && <ClientDot color={client.color} />}{title}</h1>}
           >
             {(close) => isAdmin && (
               <div className="bsheet-actions">
@@ -115,7 +116,7 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
               </div>
             )}
           </SheetSelect>
-        ) : title}
+        ) : client?.color ? <h1><ClientDot color={client.color} />{title}</h1> : title}
         meta={meta}
         actions={!isMobile && (
           <>
@@ -162,11 +163,11 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
         sections.map(({ client: c, list }) => (
           <section className="group" key={c?.id ?? 'x'}>
             {clientId === 'all' && (
-              <div className="group-head"><h2>{c?.name}</h2><span>{list.length}</span></div>
+              <div className="group-head"><h2><ClientDot color={c?.color} />{c?.name}</h2><span>{list.length}</span></div>
             )}
             <div className="cards">
               {list.map((r) => (
-                <ResourceCard key={r.id} resource={r} group={groupsById.get(r.groupId)} user={user} only={hits.get(r.id) ?? null}
+                <ResourceCard key={r.id} resource={r} group={groupsById.get(r.groupId)} user={user} only={hits.get(r.id) ?? null} color={c?.color}
                   onEdit={() => onEdit(r)} onEditAccount={(a) => onEditAccount(a, r)} onAddAccounts={() => onAddAccounts(r)} />
               ))}
             </div>
@@ -183,8 +184,15 @@ export function VaultView({ vault, user, counts, clientId, onSelectClient, onNew
   );
 }
 
-function ResourceCard({ resource: r, group, user, only, onEdit, onEditAccount, onAddAccounts }: {
+/** Punto con el color del cliente; no pinta nada si no tiene color */
+function ClientDot({ color }: { color?: string | null }) {
+  return color ? <span className="client-dot" style={{ background: color }} aria-hidden /> : null;
+}
+
+function ResourceCard({ resource: r, group, user, only, color, onEdit, onEditAccount, onAddAccounts }: {
   resource: Resource; group?: Group; user: User;
+  /** Color del cliente: borde de la tarjeta y fondo de su cabecera */
+  color?: string | null;
   /** Cuentas que coinciden con la búsqueda; null = todas */
   only: Set<string> | null;
   onEdit: () => void; onEditAccount: (a: Account) => void; onAddAccounts: () => void;
@@ -218,7 +226,7 @@ function ResourceCard({ resource: r, group, user, only, onEdit, onEditAccount, o
   }
 
   return (
-    <article className="card">
+    <article className={cx('card', color && 'tinted')} style={clientVars(color) as CSSProperties | undefined}>
       <header className="card-head">
         <div className="card-title">
           <h3>{r.name}</h3>

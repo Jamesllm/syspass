@@ -10,7 +10,11 @@ import {
 } from '../vault.js';
 
 const Id = z.object({ id: z.uuid() });
-const ClientInput = z.object({ name: z.string().trim().min(1, 'Escribe un nombre').max(120), notes: z.string().trim().max(2000).default('') });
+const ClientInput = z.object({
+  name: z.string().trim().min(1, 'Escribe un nombre').max(120),
+  notes: z.string().trim().max(2000).default(''),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i, 'Color no válido').transform((c) => c.toLowerCase()).nullable().default(null),
+});
 const GroupInput = z.object({
   name: z.string().trim().min(1, 'Escribe un nombre').max(60),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color inválido').default('#8a8a8a'),
@@ -41,7 +45,7 @@ export async function vaultRoutes(app: FastifyInstance) {
     const showWho = can(u, 'history.view');
 
     const clients = await q(
-      `select id, name, notes from clients
+      `select id, name, notes, color from clients
         where org_id = $1 and ($2::uuid[] is null or id = any($2)) order by lower(name)`, [u.orgId, ids]);
     const groups = await q(
       `select g.id, g.name, g.color, g.position,
@@ -307,7 +311,8 @@ export async function vaultRoutes(app: FastifyInstance) {
     const u = requireAdmin(req);
     const input = ClientInput.parse(req.body);
     try {
-      const [c] = await q<{ id: string }>('insert into clients (org_id, name, notes) values ($1, $2, $3) returning id', [u.orgId, input.name, input.notes]);
+      const [c] = await q<{ id: string }>('insert into clients (org_id, name, notes, color) values ($1, $2, $3, $4) returning id',
+        [u.orgId, input.name, input.notes, input.color]);
       await audit(req, 'client.create', { type: 'client', id: c.id, summary: input.name });
       return c;
     } catch (e) {
@@ -321,8 +326,8 @@ export async function vaultRoutes(app: FastifyInstance) {
     const { id } = Id.parse(req.params);
     const input = ClientInput.parse(req.body);
     try {
-      const rows = await q('update clients set name = $3, notes = $4, updated_at = now() where id = $1 and org_id = $2 returning id',
-        [id, u.orgId, input.name, input.notes]);
+      const rows = await q('update clients set name = $3, notes = $4, color = $5, updated_at = now() where id = $1 and org_id = $2 returning id',
+        [id, u.orgId, input.name, input.notes, input.color]);
       if (!rows.length) throw new HttpError(404, 'Cliente no encontrado');
     } catch (e) {
       if (uniqueViolation(e)) throw new HttpError(409, 'Ya existe un cliente con ese nombre');

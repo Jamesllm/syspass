@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Building2, FileUp, FolderTree, Globe, KeyRound, Layers, LogOut, Menu, Palette, Plus, ScrollText, ShieldCheck, Users } from 'lucide-react';
 import { BottomSheet, ICON, OrgBrand, ThemeToggle } from '../components';
 import { useIsMobile } from '../hooks';
+import { clientVars } from '../lib/brand';
 import { cx } from '../lib/format';
 import { ROLE_LABEL, can, type AppMode, type Client, type Org, type User } from '../lib/types';
 
@@ -23,14 +24,17 @@ interface NavItemProps {
   warn?: boolean;
   active?: boolean;
   muted?: boolean;
+  /** Color del cliente: reemplaza el ícono por un punto de ese color */
+  color?: string | null;
   onClick: () => void;
 }
 
 /** Fila de navegación: la usan la barra lateral y el menú "Más" del móvil. */
-function NavItem({ icon: Icon, label, count, warn, active, muted, onClick }: NavItemProps) {
+function NavItem({ icon: Icon, label, count, warn, active, muted, color, onClick }: NavItemProps) {
   return (
-    <button type="button" className={cx('nav-item', active && 'active')} onClick={onClick} aria-current={active ? 'page' : undefined}>
-      <Icon {...ICON} />
+    <button type="button" className={cx('nav-item', active && 'active', active && color && 'client-active')} onClick={onClick}
+      aria-current={active ? 'page' : undefined} style={clientVars(color) as CSSProperties | undefined}>
+      {color ? <span className="nav-dot" aria-hidden><span /></span> : <Icon {...ICON} />}
       <span className={cx('label', muted && 'muted')}>{label}</span>
       {count !== undefined && count !== '' && <span className={cx('count', warn && 'warn-count')}>{count}</span>}
     </button>
@@ -149,7 +153,7 @@ export function AppShell({ user, org, mode, version, updateAvailable, onOpenAbou
         <nav className="nav">
           <NavItem icon={Layers} label="Todos los clientes" count={totalResources} active={isClient('all')} onClick={() => onNavigate({ kind: 'vault', clientId: 'all' })} />
           {clients.map((c) => (
-            <NavItem key={c.id} icon={Building2} label={c.name} count={counts.get(c.id) ?? 0} active={isClient(c.id)} onClick={() => onNavigate({ kind: 'vault', clientId: c.id })} />
+            <NavItem key={c.id} icon={Building2} label={c.name} color={c.color} count={counts.get(c.id) ?? 0} active={isClient(c.id)} onClick={() => onNavigate({ kind: 'vault', clientId: c.id })} />
           ))}
           {isAdmin && <NavItem icon={Plus} label="Nuevo cliente" muted onClick={onNewClient} />}
         </nav>

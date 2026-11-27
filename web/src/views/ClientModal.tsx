@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Button, Confirm, Field, FormError, Input, Modal, useToast } from '../components';
 import { useAction } from '../hooks';
 import { api } from '../lib/api';
-import type { Client } from '../lib/types';
+import { cx } from '../lib/format';
+import { GROUP_COLORS, type Client } from '../lib/types';
 
 export function ClientModal({ client, resourceCount, onClose, onSaved }: {
   client: Client | null;
@@ -14,14 +15,17 @@ export function ClientModal({ client, resourceCount, onClose, onSaved }: {
   const { run, busy, error } = useAction();
   const [name, setName] = useState(client?.name ?? '');
   const [notes, setNotes] = useState(client?.notes ?? '');
+  const [color, setColor] = useState<string | null>(client?.color?.toLowerCase() ?? null);
   const [confirm, setConfirm] = useState(false);
+  const custom = !!color && !GROUP_COLORS.includes(color);
 
   function save(e: FormEvent) {
     e.preventDefault();
     run(async () => {
+      const body = { name, notes, color };
       const r = client
-        ? await api<{ id: string }>(`/api/clients/${client.id}`, { method: 'PUT', body: { name, notes } })
-        : await api<{ id: string }>('/api/clients', { body: { name, notes } });
+        ? await api<{ id: string }>(`/api/clients/${client.id}`, { method: 'PUT', body })
+        : await api<{ id: string }>('/api/clients', { body });
       toast(client ? 'Cliente actualizado' : 'Cliente creado');
       onSaved(r.id);
     });
@@ -57,6 +61,23 @@ export function ClientModal({ client, resourceCount, onClose, onSaved }: {
         <Field label="Notas">
           <Input maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Contacto, sede, contrato…" />
         </Field>
+        <div className="field">
+          <span>Color</span>
+          <div className="swatches" role="radiogroup" aria-label="Color del cliente">
+            <button type="button" role="radio" aria-checked={!color} title="Sin color"
+              className={cx('swatch small none', !color && 'on')} onClick={() => setColor(null)}>
+              <span className="sr">Sin color</span>
+            </button>
+            {GROUP_COLORS.map((c) => (
+              <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={c}
+                className={cx('swatch small', color === c && 'on')} style={{ background: c }} onClick={() => setColor(c)} />
+            ))}
+            <label className={cx('swatch small custom', custom && 'on')} title="Otro color" style={custom ? { background: color! } : undefined}>
+              <input type="color" value={color ?? '#4f86c6'} onChange={(e) => setColor(e.target.value)} aria-label="Elegir otro color" />
+            </label>
+          </div>
+          <small className="hint">Se ve en el menú y en el borde de sus recursos para distinguirlo</small>
+        </div>
         <FormError>{error}</FormError>
         <div className="modal-actions">
           {client && <Button variant="danger" className="push-left" onClick={() => setConfirm(true)}>Eliminar</Button>}
