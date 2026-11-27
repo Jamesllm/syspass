@@ -30,8 +30,9 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
 }
 
+/* Tema oscuro: el del sistema (si no se eligió claro) o el elegido en el selector */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --bg: #141415;
     --side: #0f0f10;
@@ -54,6 +55,29 @@
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
     --scrim: rgba(0, 0, 0, 0.55);
   }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #141415;
+  --side: #0f0f10;
+  --card: #19191b;
+  --raised: #232325;
+  --ink: #ededed;
+  --ink-2: #a1a1a6;
+  --ink-3: #85858b;
+  --line: rgba(237, 237, 237, 0.08);
+  --line-2: rgba(237, 237, 237, 0.14);
+  --accent: var(--brand-dark, #3fbfa9);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --btn: #ededed;
+  --btn-ink: #141415;
+  --neg: #e5484d;
+  --warn: #e0a44a;
+  --ch-digit: var(--accent);
+  --ch-sym: #e8b062;
+  --shadow-sm: none;
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(0, 0, 0, 0.55);
 }
 
 * { box-sizing: border-box; }
@@ -455,6 +479,74 @@ table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 .loading { display: grid; place-items: center; min-height: 100vh; color: var(--ink-3); }
 
+/* ── Selector de tema y versión ─────────────────────────────── */
+.theme-toggle {
+  display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px;
+  background: var(--raised); box-shadow: inset 0 0 0 1px var(--line);
+}
+.theme-toggle button {
+  display: grid; place-items: center; width: 28px; height: 24px; border-radius: 6px;
+  border: 0; background: transparent; color: var(--ink-3);
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
+}
+.theme-toggle button:hover { color: var(--ink); }
+.theme-toggle button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
+.sys-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 0 8px; }
+.version-btn {
+  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0; border: 0; background: none; padding: 4px 0;
+  font-size: 12px; color: var(--ink-3); transition: color 150ms var(--ease);
+}
+.version-btn:hover { color: var(--ink); }
+.update-tag {
+  font: 500 11px/18px var(--sans); padding: 0 6px; border-radius: 4px;
+  color: var(--accent); background: var(--accent-soft);
+}
+.auth { position: relative; }
+.auth-theme { position: absolute; right: 16px; bottom: 16px; }
+
+/* ── Modal de novedades y actualización ─────────────────────────────── */
+.modal.wide { width: min(640px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 48px)); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -8px -8px 0 0; }
+.updates { display: grid; gap: 16px; }
+.version-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 16px; border-radius: 12px; background: var(--card); border: 1px solid var(--line);
+}
+.version-row > div { display: grid; gap: 2px; }
+.version-row .muted { font-size: 12px; }
+.version-row strong { font-size: 20px; font-weight: 500; }
+.update-pill, .ok-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.update-pill { color: var(--accent); }
+.ok-pill { color: var(--ink-2); }
+.release { display: grid; gap: 10px; padding: 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); }
+.release.highlight { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.release header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.release h3 { margin: 0; font-size: 15px; font-weight: 500; }
+.release header span { font-size: 12px; color: var(--ink-3); }
+.release h4 { margin: 0 0 4px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.release ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.release li { color: var(--ink-2); }
+.release li::marker { color: var(--ink-3); }
+.update-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.update-progress { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: var(--raised); }
+.update-progress > div { display: grid; gap: 2px; }
+.update-progress strong { font-weight: 500; }
+.update-progress svg { flex: none; margin-top: 1px; color: var(--ink-2); }
+.update-progress.done svg { color: var(--accent); }
+.update-progress.failed svg { color: var(--neg); }
+.spin { animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.update-log {
+  margin: 0; max-height: 160px; overflow: auto; padding: 10px 12px; border-radius: 8px;
+  background: var(--side); border: 1px solid var(--line); font: 12px/18px var(--mono); color: var(--ink-2); white-space: pre-wrap;
+}
+code.cmd { display: block; padding: 8px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line-2); font: 500 13px var(--mono); }
+.older summary { cursor: pointer; font-size: 13px; color: var(--ink-2); padding: 4px 0; }
+.older summary:hover { color: var(--ink); }
+.older[open] summary { margin-bottom: 12px; }
+.older .release + .release { margin-top: 12px; }
+
 /* ── Pantallas medianas ─────────────────────────────── */
 @media (max-width: 1100px) {
   .acc { grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1.2fr); grid-template-areas: 'role user pass' '. meta meta' '. notes notes'; }
@@ -589,6 +681,11 @@ table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
   .modal-actions .push-left { flex: 0 0 auto; }
 
   .toasts { bottom: calc(var(--tabbar) + var(--safe-b) + 80px); }
+  .bsheet-body .sys-row { padding: 8px 12px 0; border-top: 1px solid var(--line); }
+  .bsheet-body .version-btn { font-size: 13px; }
+  .modal.wide { width: 100%; max-height: 92dvh; }
+  .auth-theme { position: static; margin-top: 24px; justify-self: center; }
+  .auth { align-content: center; }
   .temp-pass { font-size: 16px; }
 }
 

@@ -189,6 +189,7 @@ El instalador deja el comando `syspass` disponible en el servidor:
 | `syspass admin <empresa> <usuario> "Nombre"` | Crea o restablece el administrador de una empresa |
 | `syspass owner <usuario> "Nombre"` | Crea o restablece un dueño de la plataforma |
 | `syspass mode [single <empresa> \| multi]` | Ver o cambiar el modo: una sola empresa o multiempresa |
+| `syspass ui-update enable \| disable \| status` | Permitir actualizar desde la interfaz (botón «Actualizar ahora») |
 | `syspass uninstall` | Quita los contenedores y **conserva** datos, configuración y respaldos |
 | `syspass uninstall --purge` | Borra todo. Antes ofrece guardar un respaldo final |
 
@@ -227,6 +228,21 @@ sudo syspass upgrade
 ```
 
 Hace un respaldo, descarga la imagen nueva, reinicia, aplica las migraciones pendientes y actualiza el propio comando `syspass`. Para actualizar solo el comando: `sudo syspass self-update`.
+
+#### Desde la interfaz
+
+En el menú, junto a la versión instalada (`v1.3.0`), aparece **Actualizar** cuando hay una versión nueva. Al hacer clic se abre el modal de novedades con lo que trae cada versión y el botón **Actualizar ahora**. SysPass hace el respaldo, descarga la versión, aplica las migraciones y se recarga solo. Después muestra una vez las novedades de la versión nueva.
+
+Pueden actualizar los administradores de la empresa (modo una empresa) o el dueño de la plataforma (multiempresa). Hay que activarlo una vez en el servidor; el instalador lo ofrece en las instalaciones nuevas:
+
+```bash
+sudo syspass ui-update enable     # activar
+sudo syspass ui-update status     # ver el estado y la última actualización
+sudo syspass ui-update disable    # desactivar
+```
+
+> [!NOTE]
+> La app **no** tiene acceso a Docker. El botón solo deja una solicitud en `/opt/syspass/control`; un servicio de systemd del servidor (o cron, si no hay systemd) la detecta y ejecuta `syspass upgrade`. Así, aunque alguien comprometiera la app web, no podría controlar el servidor.
 
 #### Si instalaste la versión 1.0.0
 
@@ -315,6 +331,8 @@ npm run dev:web                 # Frontend en http://localhost:5173
 | `SERVE_WEB` | `false` para no servir el frontend desde la API | `true` |
 | `SYSPASS_MODE` | `single` (una sola empresa) o `multi` (SaaS) | `multi` |
 | `SYSPASS_ORG` | Código de la empresa en modo `single`; vacío = se detecta si hay una sola | vacío |
+| `SYSPASS_CONTROL_DIR` | Carpeta compartida para actualizar desde la interfaz (la configura `syspass ui-update enable`) | vacío |
+| `SYSPASS_UPDATE_REPO` | Repositorio de GitHub donde se buscan versiones nuevas | `Jamesllm/syspass` |
 
 ### Importar credenciales desde texto
 
@@ -322,11 +340,14 @@ En **Importar** (administrador de la empresa). El importador reconoce secciones 
 
 ### Publicar una versión
 
+1. Agrega la sección de la versión en [`CHANGELOG.md`](CHANGELOG.md) (`## 1.4.0 — AAAA-MM-DD` con `### Nuevo`, `### Arreglos`…) y sube `version` en los `package.json`.
+2. Crea la etiqueta:
+
 ```bash
-git tag v1.1.0 && git push --tags
+git tag v1.4.0 && git push --tags
 ```
 
-El workflow [`release.yml`](.github/workflows/release.yml) construye la imagen para `amd64` y `arm64`, la publica en `ghcr.io/jamesllm/syspass` con las etiquetas `1.1.0`, `1.1` y `latest`, y adjunta `install.sh` a la versión.
+El workflow [`release.yml`](.github/workflows/release.yml) construye la imagen para `amd64` y `arm64` con la versión grabada, la publica en `ghcr.io/jamesllm/syspass` con las etiquetas `1.4.0`, `1.4` y `latest`, y crea la versión en GitHub con `install.sh` y las notas tomadas del changelog. Esas mismas notas son las que ven los usuarios en el modal de novedades.
 
 ### Windows
 

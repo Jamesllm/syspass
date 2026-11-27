@@ -30,4 +30,11 @@ export const config = {
   mode: (process.env.SYSPASS_MODE ?? 'multi').trim().toLowerCase() === 'single' ? 'single' as const : 'multi' as const,
   /** Código de la empresa en modo single. Vacío = se detecta sola si hay una única empresa */
   singleOrg: (process.env.SYSPASS_ORG ?? '').trim().toLowerCase(),
+  /**
+   * Carpeta compartida con el servidor para pedir actualizaciones desde la interfaz.
+   * La crea `syspass ui-update enable`; vacía = botón de actualizar desactivado.
+   */
+  controlDir: (process.env.SYSPASS_CONTROL_DIR ?? '').trim(),
+  /** Repositorio de GitHub donde se publican las versiones */
+  updateRepo: (process.env.SYSPASS_UPDATE_REPO ?? 'Jamesllm/syspass').trim(),
 };

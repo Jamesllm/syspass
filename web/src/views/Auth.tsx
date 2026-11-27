@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Button, Field, FormError, Input, Logo, Modal, OrgMark, PasswordInput, useToast } from '../components';
+import { Button, Field, FormError, Input, Logo, Modal, OrgMark, PasswordInput, ThemeToggle, useToast } from '../components';
 import { useAction } from '../hooks';
 import { api } from '../lib/api';
 import { applyAccent, rememberOrg, rememberedOrg, slugify } from '../lib/brand';
@@ -23,6 +23,7 @@ function AuthLayout({ brand, title, text, children, foot }: {
         {children}
         {foot && <div className="auth-foot">{foot}</div>}
       </div>
+      <ThemeToggle className="auth-theme" />
     </main>
   );
 }

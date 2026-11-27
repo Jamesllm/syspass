@@ -23,13 +23,16 @@ export function Sheet({ title, onClose, children, footer }: { title: string; onC
 }
 
 /** Diálogo centrado (escritorio) que en móvil sube desde abajo. */
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   useLayer(onClose);
   return (
     <>
       <div className="scrim" onClick={onClose} />
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
-        <h2>{title}</h2>
+      <div className={cx('modal', wide && 'wide')} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="modal-head">
+          <h2>{title}</h2>
+          <IconButton icon={X} label="Cerrar" onClick={onClose} />
+        </div>
         {children}
       </div>
     </>

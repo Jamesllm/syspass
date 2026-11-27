@@ -14,8 +14,19 @@ import { OrgSettingsView } from './views/OrgSettingsView';
 import { OrgsView } from './views/OrgsView';
 import { ResourceSheet } from './views/ResourceSheet';
 import { ReviewView } from './views/ReviewView';
+import { UpdatesModal, type SystemInfo, type UpdatesInfo } from './views/UpdatesModal';
 import { UsersView } from './views/UsersView';
 import { VaultView } from './views/VaultView';
+
+/** Última versión cuyas novedades ya vio este navegador */
+const SEEN_KEY = 'sp_seen_version';
+const readSeen = () => { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } };
+const writeSeen = (v: string) => { try { localStorage.setItem(SEEN_KEY, v); } catch { /* sin almacenamiento */ } };
+const newer = (a: string, b: string) => {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+};
 
 type Session = { user: User; org: Org; mode: AppMode; idleMinutes: number };
 type AuthState = { status: 'loading' } | { status: 'out' } | ({ status: 'in' } & Session);
@@ -88,9 +99,27 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
   const [clientModal, setClientModal] = useState<Client | 'new' | null>(null);
   const [pwModal, setPwModal] = useState(false);
+  const [sys, setSys] = useState<SystemInfo | null>(null);
+  const [updates, setUpdates] = useState<UpdatesInfo | null>(null);
+  const [about, setAbout] = useState<'about' | 'whatsnew' | null>(null);
   const isAdmin = user.role === 'admin';
 
   useIdle(idleMinutes, onLogout);
+
+  const checkUpdates = useCallback(() => {
+    api<UpdatesInfo>('/api/system/updates').then(setUpdates).catch(() => {});
+  }, []);
+
+  // Versión instalada; novedades una vez por versión nueva; ¿hay actualización?
+  useEffect(() => {
+    api<SystemInfo>('/api/system/info').then((info) => {
+      setSys(info);
+      const seen = readSeen();
+      if (seen && newer(info.version, seen)) setAbout('whatsnew');
+      else writeSeen(info.version);
+      if (info.canUpdate) checkUpdates();
+    }).catch(() => {});
+  }, [checkUpdates]);
 
   const load = useCallback(async () => {
     try { setVault(await api<Vault>('/api/vault')); } catch (e) { toast(errorText(e), 'err'); }
@@ -115,6 +144,9 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
       user={user}
       org={org}
       mode={mode}
+      version={sys?.version ?? null}
+      updateAvailable={!!updates?.updateAvailable}
+      onOpenAbout={() => { if (sys?.canUpdate) checkUpdates(); setAbout('about'); }}
       clients={vault?.clients ?? []}
       counts={counts}
       totalResources={vault?.resources.length ?? 0}
@@ -172,6 +204,14 @@ function Workspace({ user, org, mode, idleMinutes, onLogout, onOrgChange }: {
         />
       )}
       {pwModal && <ChangePasswordModal onClose={() => setPwModal(false)} />}
+      {about && sys && (
+        <UpdatesModal
+          info={sys}
+          updates={updates}
+          whatsNew={about === 'whatsnew'}
+          onClose={() => { writeSeen(sys.version); setAbout(null); }}
+        />
+      )}
     </AppShell>
   );
 }

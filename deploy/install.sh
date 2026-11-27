@@ -262,6 +262,8 @@ else
   ask OWNER_NAME 'Nombre del dueño' 'Administrador SysPass'
 fi
 
+ask_yn UI_UPDATES '¿Permitir que los administradores actualicen SysPass desde la interfaz?' s
+
 # ── 5. Archivos ──────────────────────────────────────────────
 step "Creando $SYSPASS_DIR"
 mkdir -p "$SYSPASS_DIR/backups"
@@ -463,6 +465,125 @@ ensure_compose_env() {
   grep -q 'SYSPASS_MODE:' docker-compose.yml || { echo 'No pude agregar SYSPASS_MODE a docker-compose.yml' >&2; return 1; }
 }
 
+# Actualiza la app. Cada paso corta con error explícito (también dentro de "if", donde set -e no aplica)
+do_upgrade() {
+  need_root
+  local old_image new_image
+  echo 'Respaldo previo a la actualización'
+  backup || return 1
+  old_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
+  build_or_pull || return 1
+  ensure_compose_env || true
+  dc up -d || return 1
+  wait_healthy || return 1
+  # Borra solo la imagen anterior de SysPass (no toca imágenes de otros proyectos del servidor)
+  new_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
+  if [ -n "$old_image" ] && [ "$old_image" != "$new_image" ]; then docker image rm "$old_image" >/dev/null 2>&1 || true; fi
+  self_update || echo 'Aviso: no se pudo actualizar el comando syspass (la app sí se actualizó).' >&2
+  echo 'SysPass actualizado (las migraciones se aplican solas)'
+}
+
+# ── Actualizaciones desde la interfaz ──
+# La app solo deja un archivo "update-request" en la carpeta control/ (no tiene acceso a Docker).
+# Un servicio de systemd (o cron) lo detecta y ejecuta do_upgrade, escribiendo el estado en control/status.
+CONTROL_DIR="$DIR/control"
+UNIT_DIR=/etc/systemd/system
+UPD_STARTED=''
+
+app_version() { dc exec -T app printenv SYSPASS_VERSION 2>/dev/null | tr -d '\r' || true; }
+
+write_status() {
+  local tmp="$CONTROL_DIR/status.tmp" fin=''
+  [ "$1" = running ] || fin="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'state=%s\nfrom=%s\nto=%s\nstarted=%s\nfinished=%s\n' "$1" "$2" "$3" "$UPD_STARTED" "$fin" > "$tmp"
+  chmod 644 "$tmp"; mv -f "$tmp" "$CONTROL_DIR/status"
+}
+
+ui_update_run() {
+  local req="$CONTROL_DIR/update-request" from
+  [ -f "$req" ] || return 0
+  mv -f "$req" "$CONTROL_DIR/update-request.processing"
+  UPD_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  from="$(app_version)"
+  write_status running "$from" ''
+  : > "$CONTROL_DIR/update.log"; chmod 644 "$CONTROL_DIR/update.log"
+  if do_upgrade >> "$CONTROL_DIR/update.log" 2>&1; then
+    write_status done "$from" "$(app_version)"
+  else
+    write_status failed "$from" "$(app_version)"
+  fi
+  rm -f "$CONTROL_DIR/update-request.processing"
+}
+
+ui_update_off() {
+  if command -v systemctl >/dev/null 2>&1; then systemctl disable --now syspass-updater.path >/dev/null 2>&1 || true; fi
+  rm -f "$UNIT_DIR/syspass-updater.path" "$UNIT_DIR/syspass-updater.service" /etc/cron.d/syspass-updater
+  if command -v systemctl >/dev/null 2>&1; then systemctl daemon-reload >/dev/null 2>&1 || true; fi
+}
+
+ui_update() {
+  need_root
+  case "${1:-status}" in
+    enable)
+      mkdir -p "$CONTROL_DIR"
+      chown 1000:1000 "$CONTROL_DIR"; chmod 750 "$CONTROL_DIR"   # 1000 = usuario "node" del contenedor
+      cat > docker-compose.override.yml <<'OVR'
+# SysPass · actualizaciones desde la interfaz (sudo syspass ui-update disable para quitarlas)
+services:
+  app:
+    environment:
+      SYSPASS_CONTROL_DIR: /control
+    volumes:
+      - ./control:/control
+OVR
+      if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+        cat > "$UNIT_DIR/syspass-updater.path" <<UNIT
+[Unit]
+Description=SysPass: aplicar actualizaciones pedidas desde la interfaz
+
+[Path]
+PathExists=$CONTROL_DIR/update-request
+Unit=syspass-updater.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+        cat > "$UNIT_DIR/syspass-updater.service" <<UNIT
+[Unit]
+Description=SysPass: actualización pedida desde la interfaz
+
+[Service]
+Type=oneshot
+Environment=SYSPASS_DIR=$DIR
+ExecStart=$BIN_LINK ui-update run
+UNIT
+        systemctl daemon-reload
+        systemctl enable --now syspass-updater.path >/dev/null 2>&1
+        echo 'Servicio syspass-updater activo (systemd)'
+      else
+        echo "* * * * * root SYSPASS_DIR=$DIR $BIN_LINK ui-update run >/dev/null 2>&1" > /etc/cron.d/syspass-updater
+        chmod 644 /etc/cron.d/syspass-updater
+        echo 'Tarea programada activa (cron, revisa cada minuto)'
+      fi
+      dc up -d app && wait_healthy
+      echo 'Listo: los administradores ya pueden actualizar SysPass desde la interfaz.' ;;
+    disable)
+      ui_update_off
+      rm -f docker-compose.override.yml
+      dc up -d app && wait_healthy
+      echo 'Actualizaciones desde la interfaz desactivadas.' ;;
+    run) ui_update_run ;;
+    status)
+      if [ -f docker-compose.override.yml ] && { systemctl is-enabled syspass-updater.path >/dev/null 2>&1 || [ -f /etc/cron.d/syspass-updater ]; }; then
+        echo 'Actualizaciones desde la interfaz: activadas'
+      else
+        echo 'Actualizaciones desde la interfaz: desactivadas (activar: sudo syspass ui-update enable)'
+      fi
+      if [ -f "$CONTROL_DIR/status" ]; then echo; echo 'Última actualización:'; sed 's/^/  /' "$CONTROL_DIR/status"; fi ;;
+    *) echo 'Uso: sudo syspass ui-update [enable | disable | status]' >&2; exit 1 ;;
+  esac
+}
+
 mode_cmd() {
   need_root
   local target="${1:-}" org="${2:-}" found
@@ -560,6 +681,7 @@ MSG
     cp -a backups "$final/" 2>/dev/null || true
   fi
 
+  ui_update_off
   dc down -v --rmi all --remove-orphans || true
   docker image rm "$PG_CLIENT_IMAGE" >/dev/null 2>&1 || true
   rm -f "$BIN_LINK"
@@ -600,18 +722,8 @@ case "$cmd" in
     dc stop app
     pg_tool pg_restore -d "$DB_NAME" --clean --if-exists --no-owner < "$f"
     dc start app && wait_healthy ;;
-  upgrade)
-    need_root
-    echo 'Respaldo previo a la actualización'; backup
-    old_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
-    build_or_pull
-    ensure_compose_env || true
-    dc up -d && wait_healthy
-    # Borra solo la imagen anterior de SysPass (no toca imágenes de otros proyectos del servidor)
-    new_image="$(docker image inspect -f '{{.Id}}' "$SYSPASS_IMAGE" 2>/dev/null || true)"
-    if [ -n "$old_image" ] && [ "$old_image" != "$new_image" ]; then docker image rm "$old_image" >/dev/null 2>&1 || true; fi
-    self_update || echo 'Aviso: no se pudo actualizar el comando syspass (la app sí se actualizó).' >&2
-    echo 'SysPass actualizado (las migraciones se aplican solas)' ;;
+  upgrade)   do_upgrade ;;
+  ui-update) ui_update "$@" ;;
   self-update) self_update ;;
   admin)
     # En modo una sola empresa el código es opcional
@@ -640,6 +752,7 @@ SysPass · comandos
   syspass mode                                 Ver el modo: una empresa o multiempresa
   syspass mode single <empresa>                Una sola empresa: el login no pide código
   syspass mode multi                           Multiempresa: login con código y registro público
+  syspass ui-update enable | disable | status  Actualizar desde la interfaz (botón «Actualizar ahora»)
   syspass owner <usuario> "Nombre"             Crear o restablecer un dueño de la plataforma
   syspass uninstall                            Quitar los contenedores y conservar los datos
   syspass uninstall --purge [--yes]            Borrar todo (ofrece un respaldo final antes)
@@ -662,6 +775,11 @@ fi
 # ── 7. Arranque ──────────────────────────────────────────────
 step 'Iniciando SysPass'
 SYSPASS_DIR="$SYSPASS_DIR" "$BIN_LINK" start || die 'SysPass no arrancó. Revisa: syspass logs'
+
+if [ "$UI_UPDATES" = s ]; then
+  step 'Activando actualizaciones desde la interfaz'
+  SYSPASS_DIR="$SYSPASS_DIR" "$BIN_LINK" ui-update enable || warn 'No se pudieron activar; puedes hacerlo después con: sudo syspass ui-update enable'
+fi
 
 if [ "$SYSPASS_MODE" = single ]; then
   step "Creando la empresa $ORG_NAME y su administrador"

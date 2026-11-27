@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Building2, FileUp, Globe, KeyRound, Layers, LogOut, Menu, Palette, Plus, ScrollText, ShieldCheck, Users } from 'lucide-react';
-import { BottomSheet, ICON, OrgBrand } from '../components';
+import { BottomSheet, ICON, OrgBrand, ThemeToggle } from '../components';
 import { useIsMobile } from '../hooks';
 import { cx } from '../lib/format';
 import { ROLE_LABEL, type AppMode, type Client, type Org, type User } from '../lib/types';
@@ -49,10 +49,14 @@ function TabItem({ icon: Icon, label, active, badge, onClick }: { icon: LucideIc
   );
 }
 
-export function AppShell({ user, org, mode, clients, counts, totalResources, issueCount, view, onNavigate, onNewClient, onChangePassword, onLogout, children }: {
+export function AppShell({ user, org, mode, version, updateAvailable, onOpenAbout, clients, counts, totalResources, issueCount, view, onNavigate, onNewClient, onChangePassword, onLogout, children }: {
   user: User;
   org: Org;
   mode: AppMode;
+  /** Versión instalada de SysPass */
+  version: string | null;
+  updateAvailable: boolean;
+  onOpenAbout: () => void;
   clients: Client[];
   counts: Map<string, number>;
   totalResources: number;
@@ -89,6 +93,17 @@ export function AppShell({ user, org, mode, clients, counts, totalResources, iss
       <span>{ROLE_LABEL[user.role]}</span>
     </div>
   );
+  // Versión (abre novedades y actualización) y selector de tema
+  const systemRow = (close?: () => void) => (
+    <div className="sys-row">
+      <button type="button" className="version-btn" onClick={() => { close?.(); onOpenAbout(); }}
+        title={updateAvailable ? 'Hay una versión nueva de SysPass' : 'Versión y novedades de SysPass'}>
+        <span className="mono">{version ? `v${version}` : 'SysPass'}</span>
+        {updateAvailable && <span className="update-tag">Actualizar</span>}
+      </button>
+      <ThemeToggle />
+    </div>
+  );
 
   if (isMobile) {
     const inMore = is('users') || is('audit') || is('import') || is('settings') || is('platform');
@@ -100,7 +115,7 @@ export function AppShell({ user, org, mode, clients, counts, totalResources, iss
         <nav className="tabbar" aria-label="Secciones">
           <TabItem icon={Layers} label="Bóveda" active={is('vault')} onClick={() => onNavigate({ kind: 'vault', clientId: view.kind === 'vault' ? view.clientId : 'all' })} />
           <TabItem icon={ShieldCheck} label="Revisión" active={is('review')} badge={issueCount} onClick={() => onNavigate({ kind: 'review' })} />
-          <TabItem icon={Menu} label="Más" active={inMore || moreOpen} onClick={() => setMoreOpen(true)} />
+          <TabItem icon={Menu} label="Más" active={inMore || moreOpen} badge={updateAvailable ? 1 : undefined} onClick={() => setMoreOpen(true)} />
         </nav>
         {moreOpen && (
           <BottomSheet title="Más" onClose={() => setMoreOpen(false)}>
@@ -114,6 +129,7 @@ export function AppShell({ user, org, mode, clients, counts, totalResources, iss
             <div className="nav sep">
               {accountItems.map((i) => <NavItem key={i.label} {...i} onClick={close(i.onClick)} />)}
             </div>
+            {systemRow(() => setMoreOpen(false))}
           </BottomSheet>
         )}
       </div>
@@ -140,6 +156,7 @@ export function AppShell({ user, org, mode, clients, counts, totalResources, iss
         <div className="side-foot">
           {me}
           {accountItems.map((i) => <NavItem key={i.label} {...i} />)}
+          {systemRow()}
         </div>
       </aside>
       <main className="main">{children}</main>

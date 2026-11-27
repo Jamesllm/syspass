@@ -5,3 +5,4 @@ export { Callout, EmptyState, Logo, OrgBrand, OrgMark, PageHeader, Panel, Search
 export { BottomSheet, ChipGroup, Confirm, Modal, PickList, Sheet, SheetSelect, type Option } from './Overlay';
 export { HostTag, PasswordText } from './Secret';
 export { ToastProvider, useToast } from './Toast';
+export { ThemeToggle } from './ThemeToggle';

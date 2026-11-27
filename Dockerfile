@@ -21,11 +21,15 @@ FROM node:22-alpine
 LABEL org.opencontainers.image.title="SysPass" \
       org.opencontainers.image.description="Bóveda de credenciales multiempresa"
 
+# La versión la pasa el workflow de publicación (por ejemplo 1.3.0)
+ARG SYSPASS_VERSION=dev
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
-    PORT=8080
+    PORT=8080 \
+    SYSPASS_VERSION=$SYSPASS_VERSION
 
 WORKDIR /app
+COPY --chown=node:node CHANGELOG.md ./
 COPY --from=build --chown=node:node /src/package.json ./
 COPY --from=build --chown=node:node /src/node_modules ./node_modules
 COPY --from=build --chown=node:node /src/server/package.json ./server/
