@@ -2,6 +2,15 @@
 
 Cada versión publicada toma sus notas de este archivo. La app las muestra en el modal de novedades.
 
+## 1.4.3 — 2026-11-27
+
+### Nuevo
+- Cada recurso muestra cuántas cuentas tiene; al buscar indica cuántas coinciden (por ejemplo «1 de 21»)
+- Incluye el color por cliente de la 1.4.2, que no llegó a publicarse: borde y cabecera de sus recursos y su botón en el menú con ese color
+
+### Arreglos
+- La imagen para servidores ARM se compila sin emulación; la publicación ya no se queda colgada
+
 ## 1.4.2 — 2026-11-27
 
 ### Nuevo

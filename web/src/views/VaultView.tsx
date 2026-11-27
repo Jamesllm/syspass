@@ -231,6 +231,13 @@ function ResourceCard({ resource: r, group, user, only, color, onEdit, onEditAcc
         <div className="card-title">
           <h3>{r.name}</h3>
           <span className="type">{group?.name ?? 'Sin grupo'}</span>
+          {r.accounts.length > 0 && (
+            <span className="acc-count" title={filtered
+              ? `${accounts.length} de ${plural(r.accounts.length, 'cuenta', 'cuentas')} coinciden con la búsqueda`
+              : plural(r.accounts.length, 'cuenta', 'cuentas')}>
+              {filtered ? `${accounts.length} de ${r.accounts.length}` : plural(r.accounts.length, 'cuenta', 'cuentas')}
+            </span>
+          )}
         </div>
         <div className="card-actions">
           {r.accounts.length > 1 && canEdit && (
