@@ -199,6 +199,7 @@ function ResourceCard({ resource: r, group, user, only, color, onEdit, onEditAcc
 }) {
   const toast = useToast();
   const canEdit = can(user, 'resources.edit');
+  const canCreate = can(user, 'resources.create');
   const [sort, setSort] = useState<AccountSort>(r.accountSort ?? 'manual');
   const [showAll, setShowAll] = useState(false);
   useEffect(() => setSort(r.accountSort ?? 'manual'), [r.accountSort]);
@@ -240,6 +241,11 @@ function ResourceCard({ resource: r, group, user, only, color, onEdit, onEditAcc
           )}
         </div>
         <div className="card-actions">
+          {canCreate && (
+            <button type="button" className="head-btn" onClick={onAddAccounts} title="Agregar cuenta">
+              <Plus size={14} strokeWidth={1.5} /><span className="head-btn-label">Agregar cuenta</span>
+            </button>
+          )}
           {r.accounts.length > 1 && canEdit && (
             <label className="sort-select" title="Orden de las cuentas (se guarda para todos)">
               <ArrowUpDown size={14} strokeWidth={1.5} />
@@ -263,7 +269,7 @@ function ResourceCard({ resource: r, group, user, only, color, onEdit, onEditAcc
           <button type="button" onClick={() => setShowAll((v) => !v)}>{showAll ? 'Solo las que coinciden' : 'Ver todas'}</button>
         </div>
       )}
-      {can(user, 'resources.create') && (
+      {canCreate && (
         <button type="button" className="add-acc" onClick={onAddAccounts}>
           <Plus size={16} strokeWidth={1.5} />Agregar cuenta
         </button>

@@ -2,6 +2,11 @@
 
 Cada versión publicada toma sus notas de este archivo. La app las muestra en el modal de novedades.
 
+## 1.4.4 — 2026-11-27
+
+### Nuevo
+- Botón «Agregar cuenta» también en la cabecera de cada recurso, junto al orden de las cuentas (en pantallas chicas queda solo el ícono +)
+
 ## 1.4.3 — 2026-11-27
 
 ### Nuevo

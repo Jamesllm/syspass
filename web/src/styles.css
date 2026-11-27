@@ -356,6 +356,15 @@ h1 > .client-dot { width: 12px; height: 12px; margin-right: 12px; top: -3px; }
 }
 .sort-select select:focus { outline: none; }
 .sort-select:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+/* "Agregar cuenta" en la cabecera: mismo tamaño que el selector de orden */
+.head-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; border-radius: 6px;
+  border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2); font-size: 12px; cursor: pointer;
+  transition: border-color 150ms var(--ease), color 150ms var(--ease);
+}
+.head-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+.head-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.head-btn svg { flex: none; }
 .card-notes { padding: 0 20px 16px; color: var(--ink-2); font-size: 13px; white-space: pre-wrap; }
 
 /* Firma: etiqueta de rack con LED */
@@ -693,6 +702,9 @@ code.cmd { display: block; padding: 8px 12px; border-radius: 8px; background: va
   .acc-meta { flex-direction: row; gap: 12px; justify-content: flex-start; text-align: left; padding-bottom: 6px; }
   .review-grid, .settings-grid { grid-template-columns: minmax(0, 1fr); }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Sin espacio para el texto: "Agregar cuenta" de la cabecera queda solo con el ícono */
+  .head-btn { width: 28px; padding: 0; justify-content: center; }
+  .head-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 }
 
 /* ── Móvil ─────────────────────────────── */
@@ -704,6 +716,10 @@ code.cmd { display: block; padding: 8px 12px; border-radius: 8px; background: va
   .btn { height: 44px; }
   .btn.sm { height: 36px; }
   .icon-btn { width: 40px; height: 40px; }
+  /* En móvil "Agregar cuenta" de la cabecera queda solo con el ícono (sigue el botón al pie) */
+  .head-btn { width: 36px; height: 36px; padding: 0; justify-content: center; }
+  .head-btn svg { width: 18px; height: 18px; }
+  .head-btn-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
   .shell.mobile { display: block; min-height: 100vh; }
   .topbar {
